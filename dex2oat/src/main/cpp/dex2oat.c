@@ -28,7 +28,6 @@
 #include <dlfcn.h>    // Include this for dynamic linking functions
 
 #include "logging.h"
-#include "dobby.h"
 
 #if defined(__LP64__)
 #define LP_SELECT(lp32, lp64) lp64
@@ -40,12 +39,11 @@
 
 const char kSockName[] = "5291374ceda0aef7c5d86cd2a4f6a3ac\0";
 
-// Function prototype for the dex2oat function we want to hook
 typedef bool (*dex2oat_t)(int argc, char **argv);
-dex2oat_t original_dex2oat;
+static dex2oat_t original_dex2oat = NULL;
 
 static ssize_t xrecvmsg(int sockfd, struct msghdr *msg) {
-    int flags = MSG_WAITALL;  // Use MSG_WAITALL directly
+    int flags = MSG_WAITALL;
     int rec = recvmsg(sockfd, msg, flags);
     if (rec < 0) {
         PLOGE("recvmsg");
@@ -59,14 +57,14 @@ static void *recv_fds(int sockfd) {
     char cmsgbuf[CMSG_SPACE(sizeof(int) * cnt)];
 
     struct iovec iov = {
-            .iov_base = (void *)&cnt,  // Cast away constness
+            .iov_base = (void *)&cnt,
             .iov_len = sizeof(cnt),
     };
     struct msghdr msg = {
             .msg_iov = &iov, .msg_iovlen = 1, .msg_control = cmsgbuf, .msg_controllen = bufsz
     };
 
-    xrecvmsg(sockfd, &msg);  // Call xrecvmsg without flags
+    xrecvmsg(sockfd, &msg);
     struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
 
     if (msg.msg_controllen != bufsz || cmsg == NULL ||
@@ -106,22 +104,30 @@ bool hooked_dex2oat(int argc, char **argv) {
     const char *new_argv[argc + 1];
     int new_argc = 0;
     for (int i = 0; i < argc; i++) {
-        // 过滤掉特定的字符串
         if (strstr(argv[i], "--inline-max-code-units=0") == NULL) {
             new_argv[new_argc++] = argv[i];
         } else {
-            // 过滤参数，并记录日志
             LOGD("Excluding --inline-max-code-units=0 from dex2oat arguments");
         }
     }
     new_argv[new_argc] = NULL;
 
     // 调用原始的 dex2oat 函数，传递修改后的参数列表
+    if (original_dex2oat == NULL) {
+        original_dex2oat = (dex2oat_t)dlsym(RTLD_NEXT, "dex2oat");
+        if (!original_dex2oat) {
+            LOGE("Failed to find original dex2oat: %s", dlerror());
+            return false;
+        }
+    }
     return original_dex2oat(new_argc, (char **)new_argv);
 }
 
-int main(int argc, char **argv) {
+// 在程序启动时调用此函数来设置hook
+__attribute__((constructor))
+void init() {
     LOGD("dex2oat wrapper ppid=%d", getppid());
+
     struct sockaddr_un sock = {};
     sock.sun_family = AF_UNIX;
     strlcpy(sock.sun_path + 1, kSockName, sizeof(sock.sun_path) - 1);
@@ -129,39 +135,15 @@ int main(int argc, char **argv) {
     socklen_t len = (socklen_t)(sizeof(sa_family_t) + strlen(sock.sun_path + 1) + 1);
     if (connect(sock_fd, (struct sockaddr *)&sock, len)) {
         PLOGE("failed to connect to %s", sock.sun_path + 1);
-        return 1;
+        return;
     }
-    write_int(sock_fd, ID_VEC(LP_SELECT(0, 1), strstr(argv[0], "dex2oatd") != NULL));
+    write_int(sock_fd, ID_VEC(LP_SELECT(0, 1), strstr(getprogname(), "dex2oatd") != NULL));
     int stock_fd = recv_fd(sock_fd);
     read_int(sock_fd);
     close(sock_fd);
     LOGD("sock: %s %d", sock.sun_path + 1, stock_fd);
 
-    // Find the address of dex2oat in the shared library
-    void* handle = dlopen("libart.so", RTLD_NOW);
-    if (!handle) {
-        LOGE("Failed to open libart.so: %s", dlerror());
-        return 1;
-    }
-
-    void* dex2oat_addr = dlsym(handle, "dex2oat");
-    if (!dex2oat_addr) {
-        LOGE("Failed to find dex2oat: %s", dlerror());
-        dlclose(handle);
-        return 1;
-    }
-
-    LOGD("dex2oat address found at %p", dex2oat_addr);
-
-    // Hook the dex2oat function to modify its parameters
-    if (DobbyHook(dex2oat_addr, (void*)hooked_dex2oat, (void**)&original_dex2oat) == 0) { // 0 indicates success in Dobby
-        LOGD("Hooked dex2oat successfully");
-    } else {
-        LOGE("Failed to hook dex2oat");
-        dlclose(handle);
-        return 1;
-    }
-
+    // 修改环境变量的逻辑保持不变...
     if (getenv("LD_LIBRARY_PATH") == NULL) {
 #if defined(__LP64__)
         const char *libenv =
@@ -172,8 +154,7 @@ int main(int argc, char **argv) {
 #endif
         putenv((char *)libenv);
     }
-    fexecve(stock_fd, argv, environ);
-    PLOGE("fexecve failed");
-    dlclose(handle);
-    return 2;
+
+    // 注意：由于我们使用的是 LD_PRELOAD，这里不需要调用 fexecve。
+    // 程序将继续执行被预加载的库之后的代码。
 }

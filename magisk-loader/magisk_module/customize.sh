@@ -98,24 +98,20 @@ if [ "$FLAVOR" == "zygisk" ]; then
 
   if [ "$ARCH" = "arm" ] || [ "$ARCH" = "arm64" ]; then
     extract "$ZIPFILE" "lib/armeabi-v7a/liblspd.so" "$MODPATH/zygisk" true
-    extract "$ZIPFILE" "lib/armeabi-v7a/libdobby.so" "$MODPATH/lib" true
     mv "$MODPATH/zygisk/liblspd.so" "$MODPATH/zygisk/armeabi-v7a.so"
 
     if [ "$IS64BIT" = true ]; then
       extract "$ZIPFILE" "lib/arm64-v8a/liblspd.so" "$MODPATH/zygisk" true
-      extract "$ZIPFILE" "lib/arm64-v8a/libdobby.so" "$MODPATH/lib64" true
       mv "$MODPATH/zygisk/liblspd.so" "$MODPATH/zygisk/arm64-v8a.so"
     fi
   fi
 
   if [ "$ARCH" = "x86" ] || [ "$ARCH" = "x64" ]; then
     extract "$ZIPFILE" "lib/x86/liblspd.so" "$MODPATH/zygisk" true
-    extract "$ZIPFILE" "lib/x86/libdobby.so" "$MODPATH/lib" true
     mv "$MODPATH/zygisk/liblspd.so" "$MODPATH/zygisk/x86.so"
 
     if [ "$IS64BIT" = true ]; then
       extract "$ZIPFILE" "lib/x86_64/liblspd.so" "$MODPATH/zygisk" true
-      extract "$ZIPFILE" "lib/x86_64/libdobby.so" "$MODPATH/lib64" true
       mv "$MODPATH/zygisk/liblspd.so" "$MODPATH/zygisk/x86_64.so"
     fi
   fi

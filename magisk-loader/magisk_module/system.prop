@@ -1,2 +1,1 @@
 dalvik.vm.dex2oat-flags=--inline-max-code-units=0
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/data/adb/modules/zygisk_lsposed/lib:/data/adb/modules/zygisk_lsposed/lib64
