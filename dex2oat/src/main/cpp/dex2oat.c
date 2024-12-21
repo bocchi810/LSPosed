@@ -165,10 +165,10 @@ int main(int argc, char **argv) {
     if (getenv("LD_LIBRARY_PATH") == NULL) {
 #if defined(__LP64__)
         const char *libenv =
-            "LD_LIBRARY_PATH=/apex/com.android.art/lib64:/apex/com.android.os.statsd/lib64:/data/adb/modules/zygisk_lsposed/lib64";
+            "LD_LIBRARY_PATH=/apex/com.android.art/lib64:/apex/com.android.os.statsd/lib64";
 #else
         const char *libenv =
-                "LD_LIBRARY_PATH=/apex/com.android.art/lib:/apex/com.android.os.statsd/lib:/data/adb/modules/zygisk_lsposed/lib";
+                "LD_LIBRARY_PATH=/apex/com.android.art/lib:/apex/com.android.os.statsd/lib";
 #endif
         putenv((char *)libenv);
     }
