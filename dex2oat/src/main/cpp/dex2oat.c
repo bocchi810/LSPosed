@@ -98,36 +98,39 @@ static void write_int(int fd, int val) {
 
 // Hooked dex2oat function to modify parameters
 bool hooked_dex2oat(int argc, char **argv) {
-    (void)argc;  // 标记 argc 为未使用
-
-    // 构建新的参数列表，过滤掉 --inline-max-code-units=0
-    const char *new_argv[argc + 1];
+    // 构建新的参数列表，过滤掉 --inline-max-code-units=0 和其他不想记录的参数
+    char *new_argv[argc + 1];
     int new_argc = 0;
-    for (int i = 0; i < argc; i++) {
+
+    for (int i = 0; i < argc; ++i) {
+        // 这里可以添加更多需要排除的参数
         if (strstr(argv[i], "--inline-max-code-units=0") == NULL) {
             new_argv[new_argc++] = argv[i];
         } else {
-            LOGD("Excluding --inline-max-code-units=0 from dex2oat arguments");
+            LOGD("Excluding parameter %s from dex2oat arguments", argv[i]);
         }
     }
+
+    // 添加一个 NULL 终止符
     new_argv[new_argc] = NULL;
 
     // 调用原始的 dex2oat 函数，传递修改后的参数列表
-    if (original_dex2oat == NULL) {
+    if (!original_dex2oat) {
         original_dex2oat = (dex2oat_t)dlsym(RTLD_NEXT, "dex2oat");
         if (!original_dex2oat) {
             LOGE("Failed to find original dex2oat: %s", dlerror());
             return false;
         }
     }
-    return original_dex2oat(new_argc, (char **)new_argv);
+
+    return original_dex2oat(new_argc, new_argv);
 }
 
-// 在程序启动时调用此函数来设置hook
-__attribute__((constructor))
-void init() {
+// Main function for the executable
+int main(int argc, char **argv) {
     LOGD("dex2oat wrapper ppid=%d", getppid());
 
+    // 连接到套接字并进行通信的逻辑...
     struct sockaddr_un sock = {};
     sock.sun_family = AF_UNIX;
     strlcpy(sock.sun_path + 1, kSockName, sizeof(sock.sun_path) - 1);
@@ -135,9 +138,9 @@ void init() {
     socklen_t len = (socklen_t)(sizeof(sa_family_t) + strlen(sock.sun_path + 1) + 1);
     if (connect(sock_fd, (struct sockaddr *)&sock, len)) {
         PLOGE("failed to connect to %s", sock.sun_path + 1);
-        return;
+        return 1;
     }
-    write_int(sock_fd, ID_VEC(LP_SELECT(0, 1), strstr(getprogname(), "dex2oatd") != NULL));
+    write_int(sock_fd, ID_VEC(LP_SELECT(0, 1), strstr(argv[0], "dex2oatd") != NULL));
     int stock_fd = recv_fd(sock_fd);
     read_int(sock_fd);
     close(sock_fd);
@@ -155,6 +158,23 @@ void init() {
         putenv((char *)libenv);
     }
 
-    // 注意：由于我们使用的是 LD_PRELOAD，这里不需要调用 fexecve。
-    // 程序将继续执行被预加载的库之后的代码。
+    // Hook dex2oat
+    void* handle = dlopen("libart.so", RTLD_NOW);
+    if (!handle) {
+        LOGE("Failed to open libart.so: %s", dlerror());
+        return 1;
+    }
+
+    original_dex2oat = (dex2oat_t)dlsym(handle, "dex2oat");
+    if (!original_dex2oat) {
+        LOGE("Failed to find dex2oat: %s", dlerror());
+        dlclose(handle);
+        return 1;
+    }
+
+    LOGD("dex2oat address found at %p", original_dex2oat);
+
+    // 使用 execve 执行原 dex2oat 程序，但使用 hook 函数处理参数
+    // 注意：这里我们不直接替换函数指针，而是通过 hook 函数处理参数后调用原始函数
+    return hooked_dex2oat(argc, argv) ? 0 : 1;
 }
