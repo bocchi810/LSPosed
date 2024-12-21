@@ -27,4 +27,5 @@ else
   rm -rf /data/adb/lspd
 fi
 
+rm /apex/com.android.art/lib/libdobby.so
 rm -rf /data/adb/riru/modules/lspd
