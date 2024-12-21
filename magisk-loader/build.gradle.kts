@@ -216,6 +216,7 @@ fun afterEval() = android.applicationVariants.forEach { variant ->
             val libDir = variantCapped + "/strip${variantCapped}DebugSymbols"
             from(layout.buildDirectory.dir("intermediates/stripped_native_libs/$libDir/out/lib")) {
                 include("**/liblspd.so")
+                include("**/libdobby.so")
             }
         }
         into("bin") {
