@@ -112,15 +112,13 @@ if [ "$FLAVOR" == "zygisk" ]; then
 
   if [ "$ARCH" = "x86" ] || [ "$ARCH" = "x64" ]; then
     extract "$ZIPFILE" "lib/x86/liblspd.so" "$MODPATH/zygisk" true
-    extract "$ZIPFILE" "lib/x86/libdobby.so" "$MODPATH/zygisk" true
+    extract "$ZIPFILE" "lib/x86/libdobby.so" "$MODPATH/lib" true
     mv "$MODPATH/zygisk/liblspd.so" "$MODPATH/zygisk/x86.so"
-    mv "$MODPATH/zygisk/libdobby.so" "/apex/com.android.art/lib/libdobby.so"
 
     if [ "$IS64BIT" = true ]; then
       extract "$ZIPFILE" "lib/x86_64/liblspd.so" "$MODPATH/zygisk" true
-      extract "$ZIPFILE" "lib/x86_64/libdobby.so" "$MODPATH/zygisk" true
+      extract "$ZIPFILE" "lib/x86_64/libdobby.so" "$MODPATH/lib64" true
       mv "$MODPATH/zygisk/liblspd.so" "$MODPATH/zygisk/x86_64.so"
-      mv "$MODPATH/zygisk/libdobby.so" "/apex/com.android.art/lib/libdobby.so"
     fi
   fi
 fi
