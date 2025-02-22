@@ -26,6 +26,8 @@ plugins {
     alias(libs.plugins.materialthemebuilder)
     alias(libs.plugins.lsplugin.resopt)
     alias(libs.plugins.lsplugin.apksign)
+    alias(libs.plugins.kotlin)
+    alias(libs.plugins.ksp)
 }
 
 apksign {
@@ -77,6 +79,9 @@ android {
         }
     }
     namespace = defaultManagerPackageName
+    kotlinOptions {
+        jvmTarget = "21"
+    }
 }
 
 autoResConfig {
@@ -123,7 +128,7 @@ materialThemeBuilder {
 }
 
 dependencies {
-    annotationProcessor(libs.glide.compiler)
+    ksp(libs.glide.ksp)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.browser)
     implementation(libs.androidx.constraintlayout)
@@ -153,11 +158,11 @@ dependencies {
     implementation(libs.hiddenapibypass)
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.androidx.core.ktx)
     implementation(projects.services.managerService)
 }
 
 configurations.all {
-    exclude("org.jetbrains", "annotations")
     exclude("androidx.appcompat", "appcompat")
     exclude("org.jetbrains.kotlin", "kotlin-stdlib-jdk7")
     exclude("org.jetbrains.kotlin", "kotlin-stdlib-jdk8")

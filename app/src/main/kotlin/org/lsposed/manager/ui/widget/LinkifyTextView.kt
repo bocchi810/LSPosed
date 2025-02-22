@@ -17,80 +17,74 @@
  * Copyright (C) 2020 EdXposed Contributors
  * Copyright (C) 2021 LSPosed Contributors
  */
+package org.lsposed.manager.ui.widget
 
-package org.lsposed.manager.ui.widget;
+import android.annotation.SuppressLint
+import android.content.Context
+import android.text.Spanned
+import android.text.style.ClickableSpan
+import android.util.AttributeSet
+import android.view.MotionEvent
+import androidx.appcompat.widget.AppCompatTextView
 
-import android.annotation.SuppressLint;
-import android.content.Context;
-import android.text.Layout;
-import android.text.Spanned;
-import android.text.style.ClickableSpan;
-import android.util.AttributeSet;
-import android.view.MotionEvent;
+class LinkifyTextView : AppCompatTextView {
+    var currentSpan: ClickableSpan? = null
+        private set
 
-import androidx.annotation.NonNull;
+    constructor(context: Context) : super(context)
 
-public class LinkifyTextView extends androidx.appcompat.widget.AppCompatTextView {
+    constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
 
-    private ClickableSpan mCurrentSpan;
+    constructor(context: Context, attrs: AttributeSet?, defStyleAttr: Int) : super(
+        context,
+        attrs,
+        defStyleAttr
+    )
 
-    public LinkifyTextView(Context context) {
-        super(context);
-    }
-
-    public LinkifyTextView(Context context, AttributeSet attrs) {
-        super(context, attrs);
-    }
-
-    public LinkifyTextView(Context context, AttributeSet attrs, int defStyleAttr) {
-        super(context, attrs, defStyleAttr);
-    }
-
-    public ClickableSpan getCurrentSpan() {
-        return mCurrentSpan;
-    }
-
-    public void clearCurrentSpan() {
-        mCurrentSpan = null;
+    fun clearCurrentSpan() {
+        this.currentSpan = null
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    @Override
-    public boolean onTouchEvent(@NonNull MotionEvent event) {
+    override fun onTouchEvent(event: MotionEvent): Boolean {
         // Let the parent or grandparent of TextView to handles click action.
         // Otherwise click effect like ripple will not work, and if touch area
         // do not contain a url, the TextView will still get MotionEvent.
         // onTouchEven must be called with MotionEvent.ACTION_DOWN for each touch
         // action on it, so we analyze touched url here.
         if (event.getAction() == MotionEvent.ACTION_DOWN) {
-            mCurrentSpan = null;
+            this.currentSpan = null
 
-            if (getText() instanceof Spanned) {
+            if (getText() is Spanned) {
                 // Get this code from android.text.method.LinkMovementMethod.
                 // Work fine !
-                int x = (int) event.getX();
-                int y = (int) event.getY();
+                var x = event.getX().toInt()
+                var y = event.getY().toInt()
 
-                x -= getTotalPaddingLeft();
-                y -= getTotalPaddingTop();
+                x -= getTotalPaddingLeft()
+                y -= getTotalPaddingTop()
 
-                x += getScrollX();
-                y += getScrollY();
+                x += getScrollX()
+                y += getScrollY()
 
-                Layout layout = getLayout();
+                val layout = getLayout()
                 if (null != layout) {
-                    int line = layout.getLineForVertical(y);
-                    int off = layout.getOffsetForHorizontal(line, x);
+                    val line = layout.getLineForVertical(y)
+                    val off = layout.getOffsetForHorizontal(line, x.toFloat())
 
-                    ClickableSpan[] spans = ((Spanned) getText()).getSpans(off, off, ClickableSpan.class);
+                    val spans = (getText() as Spanned).getSpans<ClickableSpan?>(
+                        off,
+                        off,
+                        ClickableSpan::class.java
+                    )
 
-                    if (spans.length > 0) {
-                        mCurrentSpan = spans[0];
+                    if (spans.size > 0) {
+                        this.currentSpan = spans[0]
                     }
                 }
             }
         }
 
-        return super.onTouchEvent(event);
+        return super.onTouchEvent(event)
     }
 }

@@ -17,307 +17,302 @@
  * Copyright (C) 2020 EdXposed Contributors
  * Copyright (C) 2021 LSPosed Contributors
  */
+package org.lsposed.manager.repo
 
-package org.lsposed.manager.repo;
+import android.content.res.Resources
+import android.util.Log
+import com.google.gson.Gson
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Request
+import okhttp3.Response
+import org.lsposed.manager.App
+import org.lsposed.manager.R
+import org.lsposed.manager.repo.model.OnlineModule
+import org.lsposed.manager.repo.model.Release
+import java.io.IOException
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.util.Arrays
+import java.util.concurrent.ConcurrentHashMap
 
-import android.content.res.Resources;
-import android.util.Log;
+class RepoLoader {
+    internal var onlineModules: MutableMap<String?, OnlineModule?> =
+        HashMap<String?, OnlineModule?>()
+    private var latestVersion: MutableMap<String?, ModuleVersion?> =
+        ConcurrentHashMap<String?, ModuleVersion?>()
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
-import com.google.gson.Gson;
-
-import org.lsposed.manager.App;
-import org.lsposed.manager.R;
-import org.lsposed.manager.repo.model.OnlineModule;
-import org.lsposed.manager.repo.model.Release;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.Request;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
-
-public class RepoLoader {
-    private static RepoLoader instance = null;
-    private Map<String, OnlineModule> onlineModules = new HashMap<>();
-    private Map<String, ModuleVersion> latestVersion = new ConcurrentHashMap<>();
-
-    public static class ModuleVersion {
-        public String versionName;
-        public long versionCode;
-
-        private ModuleVersion(long versionCode, String versionName) {
-            this.versionName = versionName;
-            this.versionCode = versionCode;
+    class ModuleVersion internal constructor(var versionCode: Long, var versionName: String?) {
+        fun upgradable(versionCode: Long, versionName: String): Boolean {
+            return this.versionCode > versionCode || (this.versionCode == versionCode && versionName.replace(
+                ' ',
+                '_'
+            ) != this.versionName)
         }
-
-        public boolean upgradable(long versionCode, String versionName) {
-            return this.versionCode > versionCode || (this.versionCode == versionCode && !versionName.replace(' ', '_').equals(this.versionName));
-        }
-
     }
 
-    private final Path repoFile = Paths.get(App.getInstance().getFilesDir().getAbsolutePath(), "repo.json");
-    private final Set<RepoListener> listeners = ConcurrentHashMap.newKeySet();
-    private boolean repoLoaded = false;
-    private static final String originRepoUrl = "https://modules.lsposed.org/";
-    private static final String backupRepoUrl = "https://modules-blogcdn.lsposed.org/";
+    private val repoFile: Path? =
+        Paths.get(App.instance?.getFilesDir()?.getAbsolutePath(), "repo.json")
+    private val listeners: MutableSet<RepoListener> = ConcurrentHashMap.newKeySet<RepoListener?>()
+    var isRepoLoaded: Boolean = false
+        private set
+    private val resources: Resources? = App.instance?.getResources()
+    private val channels: Array<out String?>? = resources?.getStringArray(R.array.update_channel_values)
 
-    private static final String secondBackupRepoUrl = "https://modules-cloudflare.lsposed.org/";
-    private static String repoUrl = originRepoUrl;
-    private final Resources resources = App.getInstance().getResources();
-    private final String[] channels = resources.getStringArray(R.array.update_channel_values);
-
-    public boolean isRepoLoaded() {
-        return repoLoaded;
-    }
-
-    public static synchronized RepoLoader getInstance() {
-        if (instance == null) {
-            instance = new RepoLoader();
-            App.getExecutorService().submit(() -> instance.loadLocalData(true));
-        }
-        return instance;
-    }
-
-    synchronized public void loadRemoteData() {
-        repoLoaded = false;
+    @Synchronized
+    fun loadRemoteData() {
+        this.isRepoLoaded = false
         try {
-            try (var response = App.getOkHttpClient().newCall(new Request.Builder().url(repoUrl + "modules.json").build()).execute()) {
-
-                if (response.isSuccessful()) {
-                    ResponseBody body = response.body();
-                    if (body != null) {
-                        try {
-                            String bodyString = body.string();
-                            Files.write(repoFile, bodyString.getBytes(StandardCharsets.UTF_8));
-                            loadLocalData(false);
-                        } catch (Throwable t) {
-                            Log.e(App.TAG, Log.getStackTraceString(t));
-                            for (RepoListener listener : listeners) {
-                                listener.onThrowable(t);
+            App.okHttpClient?.newCall(Request.Builder().url(repoUrl + "modules.json").build())
+                ?.execute().use { response ->
+                    if (response?.isSuccessful == true) {
+                        val body = response.body
+                        if (body != null) {
+                            try {
+                                val bodyString = body.string()
+                                Files.write(
+                                    repoFile,
+                                    bodyString.toByteArray(StandardCharsets.UTF_8)
+                                )
+                                loadLocalData(false)
+                            } catch (t: Throwable) {
+                                Log.e(App.TAG, Log.getStackTraceString(t))
+                                for (listener in listeners) {
+                                    listener.onThrowable(t)
+                                }
                             }
                         }
                     }
                 }
+        } catch (e: Throwable) {
+            Log.e(App.TAG, "load remote data", e)
+            for (listener in listeners) {
+                listener.onThrowable(e)
             }
-        } catch (Throwable e) {
-            Log.e(App.TAG, "load remote data", e);
-            for (RepoListener listener : listeners) {
-                listener.onThrowable(e);
-            }
-            if (repoUrl.equals(originRepoUrl)) {
-                repoUrl = backupRepoUrl;
-                loadRemoteData();
-            } else if (repoUrl.equals(backupRepoUrl)) {
-                repoUrl = secondBackupRepoUrl;
-                loadRemoteData();
+            if (repoUrl == originRepoUrl) {
+                repoUrl = backupRepoUrl
+                loadRemoteData()
+            } else if (repoUrl == backupRepoUrl) {
+                repoUrl = secondBackupRepoUrl
+                loadRemoteData()
             }
         }
     }
 
-    synchronized public void loadLocalData(boolean updateRemoteRepo) {
-        repoLoaded = false;
+    @Synchronized
+    fun loadLocalData(updateRemoteRepo: Boolean) {
+        var updateRemoteRepo = updateRemoteRepo
+        this.isRepoLoaded = false
         try {
             if (Files.notExists(repoFile)) {
-                loadRemoteData();
-                updateRemoteRepo = false;
+                loadRemoteData()
+                updateRemoteRepo = false
             }
-            byte[] encoded = Files.readAllBytes(repoFile);
-            String bodyString = new String(encoded, StandardCharsets.UTF_8);
-            Gson gson = new Gson();
-            Map<String, OnlineModule> modules = new HashMap<>();
-            OnlineModule[] repoModules = gson.fromJson(bodyString, OnlineModule[].class);
-            Arrays.stream(repoModules).forEach(onlineModule -> modules.put(onlineModule.getName(), onlineModule));
-            var channel = App.getPreferences().getString("update_channel", channels[0]);
-            updateLatestVersion(repoModules, channel);
-            onlineModules = modules;
-        } catch (Throwable t) {
-            Log.e(App.TAG, Log.getStackTraceString(t));
-            for (RepoListener listener : listeners) {
-                listener.onThrowable(t);
+            val encoded = Files.readAllBytes(repoFile)
+            val bodyString = String(encoded, StandardCharsets.UTF_8)
+            val gson = Gson()
+
+            // 解析为 Array<OnlineModule>
+            val repoModules: Array<OnlineModule> = gson.fromJson(bodyString, Array<OnlineModule>::class.java)
+
+            // 将 Array<OnlineModule> 转换为 MutableMap<String?, OnlineModule?>
+            val modules: MutableMap<String?, OnlineModule?> = HashMap()
+            for (onlineModule in repoModules) {
+                modules[onlineModule.name] = onlineModule
+            }
+
+            // 更新最新版本信息
+            val channel = App.preferences.getString("update_channel", channels?.get(0))
+            updateLatestVersion(modules, channel!!)
+
+            // 更新 onlineModules
+            onlineModules = modules
+        } catch (t: Throwable) {
+            Log.e(App.TAG, Log.getStackTraceString(t))
+            for (listener in listeners) {
+                listener.onThrowable(t)
             }
         } finally {
-            repoLoaded = true;
-            for (RepoListener listener : listeners) {
-                listener.onRepoLoaded();
+            this.isRepoLoaded = true
+            for (listener in listeners) {
+                listener.onRepoLoaded()
             }
-            if (updateRemoteRepo) loadRemoteData();
+            if (updateRemoteRepo) loadRemoteData()
         }
     }
 
-    synchronized private void updateLatestVersion(OnlineModule[] onlineModules, String channel) {
-        repoLoaded = false;
-        Map<String, ModuleVersion> versions = new ConcurrentHashMap<>();
-        for (var module : onlineModules) {
-            String release = module.getLatestRelease();
-            if (channel.equals(channels[1]) && module.getLatestBetaRelease() != null && !module.getLatestBetaRelease().isEmpty()) {
-                release = module.getLatestBetaRelease();
-            } else if (channel.equals(channels[2])) {
-                if (module.getLatestSnapshotRelease() != null && !module.getLatestSnapshotRelease().isEmpty())
-                    release = module.getLatestSnapshotRelease();
-                else if (module.getLatestBetaRelease() != null && !module.getLatestBetaRelease().isEmpty())
-                    release = module.getLatestBetaRelease();
+    @Synchronized
+    internal fun updateLatestVersion(onlineModules: MutableMap<String?, OnlineModule?>, channel: String) {
+        this.isRepoLoaded = false
+        val versions: MutableMap<String?, ModuleVersion?> =
+            ConcurrentHashMap<String?, ModuleVersion?>()
+        for (module in onlineModules.values) {
+            // 检查 module 是否为 null
+            if (module == null) continue
+
+            var release = module.latestRelease
+            if (channel == channels?.get(1) && module.latestBetaRelease != null && module.latestBetaRelease!!.isEmpty()) {
+                release = module.latestBetaRelease
+            } else if (channel == channels?.get(2)) {
+                if (module.latestSnapshotRelease != null && module.latestSnapshotRelease!!.isEmpty()) {
+                    release = module.latestSnapshotRelease
+                } else if (module.latestBetaRelease != null && module.latestBetaRelease!!.isEmpty()) {
+                    release = module.latestBetaRelease
+                }
             }
-            if (release == null || release.isEmpty()) continue;
-            var splits = release.split("-", 2);
-            if (splits.length < 2) continue;
-            long verCode;
-            String verName;
+            if (release == null || release.isEmpty()) continue
+            val splits: Array<String?> = release.split("-".toRegex(), limit = 2).toTypedArray()
+            if (splits.size < 2) continue
+            val verCode: Long
+            val verName: String?
             try {
-                verCode = Long.parseLong(splits[0]);
-                verName = splits[1];
-            } catch (NumberFormatException ignored) {
-                continue;
+                verCode = splits[0]!!.toLong()
+                verName = splits[1]
+            } catch (ignored: NumberFormatException) {
+                continue
             }
-            String pkgName = module.getName();
-            versions.put(pkgName, new ModuleVersion(verCode, verName));
-        }
-        latestVersion = versions;
-        repoLoaded = true;
-        for (RepoListener listener : listeners) {
-            listener.onRepoLoaded();
+            val pkgName = module.name
+            versions.put(pkgName, ModuleVersion(verCode, verName))
         }
     }
 
-    public void updateLatestVersion(String channel) {
-        if (repoLoaded)
-            updateLatestVersion(onlineModules.keySet().parallelStream().map(onlineModules::get).toArray(OnlineModule[]::new), channel);
+    fun getModuleLatestVersion(packageName: String?): ModuleVersion? {
+        return if (this.isRepoLoaded) latestVersion.getOrDefault(packageName, null) else null
     }
 
-    @Nullable
-    public ModuleVersion getModuleLatestVersion(String packageName) {
-        return repoLoaded ? latestVersion.getOrDefault(packageName, null) : null;
-    }
-
-    @Nullable
-    public List<Release> getReleases(String packageName) {
-        var channel = App.getPreferences().getString("update_channel", channels[0]);
-        List<Release> releases = new ArrayList<>();
-        if (repoLoaded) {
-            var module = onlineModules.get(packageName);
+    fun getReleases(packageName: String?): MutableList<Release?>? {
+        val channel = App.preferences.getString("update_channel", channels?.get(0))
+        var releases: MutableList<Release?>? = ArrayList<Release?>()
+        if (this.isRepoLoaded) {
+            val module: OnlineModule? = onlineModules.get(packageName)
             if (module != null) {
-                releases = module.getReleases();
+                releases = module.releases
                 if (!module.releasesLoaded) {
-                    if (channel.equals(channels[1]) && !(module.getBetaReleases() != null && module.getBetaReleases().isEmpty())) {
-                        releases = module.getBetaReleases();
-                    } else if (channel.equals(channels[2]))
-                        if (!(module.getSnapshotReleases() != null && module.getSnapshotReleases().isEmpty()))
-                            releases = module.getSnapshotReleases();
-                        else if (!(module.getBetaReleases() != null && module.getBetaReleases().isEmpty()))
-                            releases = module.getBetaReleases();
+                    if (channel == channels?.get(1) && !(module.betaReleases != null && module.betaReleases!!
+                            .isEmpty())
+                    ) {
+                        releases = module.betaReleases
+                    } else if (channel == channels?.get(2)) if (!(module.snapshotReleases != null && module.snapshotReleases!!
+                            .isEmpty())
+                    ) releases = module.snapshotReleases
+                    else if (!(module.betaReleases != null && module.betaReleases!!
+                            .isEmpty())
+                    ) releases = module.betaReleases
                 }
             }
         }
-        return releases;
+        return releases
     }
 
-    @Nullable
-    public String getLatestReleaseTime(String packageName, String channel) {
-        String releaseTime = null;
-        if (repoLoaded) {
-            var module = onlineModules.get(packageName);
+    fun getLatestReleaseTime(packageName: String?, channel: String): String? {
+        var releaseTime: String? = null
+        if (this.isRepoLoaded) {
+            val module: OnlineModule? = onlineModules.get(packageName)
             if (module != null) {
-                releaseTime = module.getLatestReleaseTime();
-                if (channel.equals(channels[1]) && module.getLatestBetaReleaseTime() != null) {
-                    releaseTime = module.getLatestBetaReleaseTime();
-                } else if (channel.equals(channels[2]))
-                    if (module.getLatestSnapshotReleaseTime() != null)
-                        releaseTime = module.getLatestSnapshotReleaseTime();
-                    else if (module.getLatestBetaReleaseTime() != null)
-                        releaseTime = module.getLatestBetaReleaseTime();
+                releaseTime = module.latestReleaseTime
+                if (channel == channels?.get(1) && module.latestBetaReleaseTime != null) {
+                    releaseTime = module.latestBetaReleaseTime
+                } else if (channel == channels?.get(2)) if (module.latestSnapshotReleaseTime != null) releaseTime =
+                    module.latestSnapshotReleaseTime
+                else if (module.latestBetaReleaseTime != null) releaseTime =
+                    module.latestBetaReleaseTime
             }
         }
-        return releaseTime;
+        return releaseTime
     }
 
-    public void loadRemoteReleases(String packageName) {
-        App.getOkHttpClient().newCall(new Request.Builder().url(String.format(repoUrl + "module/%s.json", packageName)).build()).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                Log.e(App.TAG, call.request().url() + e.getMessage());
-                if (repoUrl.equals(originRepoUrl)) {
-                    repoUrl = backupRepoUrl;
-                    loadRemoteReleases(packageName);
-                } else if (repoUrl.equals(backupRepoUrl)) {
-                    repoUrl = secondBackupRepoUrl;
-                    loadRemoteReleases(packageName);
+    fun loadRemoteReleases(packageName: String) {
+        App.okHttpClient?.newCall(
+            Request.Builder().url(String.format(repoUrl + "module/%s.json", packageName)).build()
+        )?.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e(App.TAG, call.request().url.toString() + e.message)
+                if (repoUrl == originRepoUrl) {
+                    repoUrl = backupRepoUrl
+                    loadRemoteReleases(packageName)
+                } else if (repoUrl == backupRepoUrl) {
+                    repoUrl = secondBackupRepoUrl
+                    loadRemoteReleases(packageName)
                 } else {
-                    for (RepoListener listener : listeners) {
-                        listener.onThrowable(e);
+                    for (listener in listeners) {
+                        listener.onThrowable(e)
                     }
                 }
             }
 
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) {
-                if (response.isSuccessful()) {
-                    ResponseBody body = response.body();
+            override fun onResponse(call: Call, response: Response) {
+                if (response.isSuccessful) {
+                    val body = response.body
                     if (body != null) {
                         try {
-                            String bodyString = body.string();
-                            Gson gson = new Gson();
-                            OnlineModule module = gson.fromJson(bodyString, OnlineModule.class);
-                            module.releasesLoaded = true;
-                            onlineModules.replace(packageName, module);
-                            for (RepoListener listener : listeners) {
-                                listener.onModuleReleasesLoaded(module);
+                            val bodyString = body.string()
+                            val gson = Gson()
+                            val module =
+                                gson.fromJson<OnlineModule>(bodyString, OnlineModule::class.java)
+                            module.releasesLoaded = true
+                            onlineModules.replace(packageName, module)
+                            for (listener in listeners) {
+                                listener.onModuleReleasesLoaded(module)
                             }
-                        } catch (Throwable t) {
-                            Log.e(App.TAG, Log.getStackTraceString(t));
-                            for (RepoListener listener : listeners) {
-                                listener.onThrowable(t);
+                        } catch (t: Throwable) {
+                            Log.e(App.TAG, Log.getStackTraceString(t))
+                            for (listener in listeners) {
+                                listener.onThrowable(t)
                             }
                         }
                     }
                 }
             }
-        });
+        })
     }
 
-    public void addListener(RepoListener listener) {
-        listeners.add(listener);
+    fun addListener(listener: RepoListener?) {
+        listeners.add(listener!!)
     }
 
-    public void removeListener(RepoListener listener) {
-        listeners.remove(listener);
+    fun removeListener(listener: RepoListener?) {
+        listeners.remove(listener)
     }
 
-    @Nullable
-    public OnlineModule getOnlineModule(String packageName) {
-        return repoLoaded && packageName != null ? onlineModules.get(packageName) : null;
+    fun getOnlineModule(packageName: String?): OnlineModule? {
+        return if (this.isRepoLoaded && packageName != null) onlineModules.get(packageName) else null
     }
 
-    @Nullable
-    public Collection<OnlineModule> getOnlineModules() {
-        return repoLoaded ? onlineModules.values() : null;
+    fun getOnlineModules(): MutableCollection<OnlineModule?>? {
+        return if (this.isRepoLoaded) onlineModules.values else null
     }
 
-    public interface RepoListener {
-        default void onRepoLoaded() {
+    interface RepoListener {
+        fun onRepoLoaded() {
         }
 
-        default void onModuleReleasesLoaded(OnlineModule module) {
+        fun onModuleReleasesLoaded(module: OnlineModule?) {
         }
 
-        default void onThrowable(Throwable t) {
-            Log.e(App.TAG, "load repo failed", t);
+        fun onThrowable(t: Throwable?) {
+            Log.e(App.TAG, "load repo failed", t)
         }
+    }
+
+    companion object {
+        @JvmStatic
+        @get:Synchronized
+        var instance: RepoLoader? = null
+            get() {
+                if (field == null) {
+                    field = RepoLoader()
+                    App.executorService
+                        ?.submit(Runnable { field!!.loadLocalData(true) })
+                }
+                return field
+            }
+            private set
+        private const val originRepoUrl = "https://modules.lsposed.org/"
+        private const val backupRepoUrl = "https://modules-blogcdn.lsposed.org/"
+
+        private const val secondBackupRepoUrl = "https://modules-cloudflare.lsposed.org/"
+        private var repoUrl: String = originRepoUrl
     }
 }

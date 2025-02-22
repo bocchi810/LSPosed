@@ -16,454 +16,524 @@
  *
  * Copyright (C) 2021 LSPosed Contributors-->
  */
+package org.lsposed.manager.ui.fragment
 
-package org.lsposed.manager.ui.fragment;
+import android.annotation.SuppressLint
+import android.content.res.Resources
+import android.graphics.Typeface
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.text.Spannable
+import android.text.SpannableStringBuilder
+import android.text.TextUtils
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
+import android.view.View
+import android.view.View.OnAttachStateChangeListener
+import android.view.ViewGroup
+import android.webkit.WebView
+import android.widget.Filter
+import android.widget.Filterable
+import android.widget.TextView
+import androidx.appcompat.widget.SearchView
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.view.MenuProvider
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.RecyclerView.AdapterDataObserver
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout.OnRefreshListener
+import org.lsposed.manager.App
+import org.lsposed.manager.R
+import org.lsposed.manager.databinding.FragmentRepoBinding
+import org.lsposed.manager.databinding.ItemOnlinemoduleBinding
+import org.lsposed.manager.repo.RepoLoader
+import org.lsposed.manager.repo.RepoLoader.RepoListener
+import org.lsposed.manager.repo.model.OnlineModule
+import org.lsposed.manager.ui.widget.EmptyStateRecyclerView.EmptyStateAdapter
+import org.lsposed.manager.util.ModuleUtil
+import org.lsposed.manager.util.ModuleUtil.InstalledModule
+import org.lsposed.manager.util.ModuleUtil.ModuleListener
+import rikka.core.util.LabelComparator
+import rikka.core.util.ResourceUtils
+import rikka.recyclerview.fixEdgeEffect
+import rikka.widget.borderview.BorderView.OnBorderVisibilityChangedListener
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.function.Predicate
+import java.util.stream.Collectors
+import androidx.core.content.edit
 
-import android.annotation.SuppressLint;
-import android.content.res.Resources;
-import android.graphics.Typeface;
-import android.os.Build;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.text.Spannable;
-import android.text.SpannableStringBuilder;
-import android.text.TextUtils;
-import android.text.style.ForegroundColorSpan;
-import android.text.style.StyleSpan;
-import android.text.style.TypefaceSpan;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup;
-import android.webkit.WebView;
-import android.widget.Filter;
-import android.widget.Filterable;
-import android.widget.TextView;
+class RepoFragment : BaseFragment(), RepoListener, ModuleListener, MenuProvider {
+    protected var binding: FragmentRepoBinding? = null
+    protected var searchView: SearchView? = null
+    private var mSearchListener: SearchView.OnQueryTextListener? = null
+    private val mHandler = Handler(Looper.getMainLooper())
+    private var preLoadWebview = true
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.widget.SearchView;
-import androidx.constraintlayout.widget.ConstraintLayout;
-import androidx.core.view.MenuProvider;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-
-import org.lsposed.manager.App;
-import org.lsposed.manager.R;
-import org.lsposed.manager.databinding.FragmentRepoBinding;
-import org.lsposed.manager.databinding.ItemOnlinemoduleBinding;
-import org.lsposed.manager.repo.RepoLoader;
-import org.lsposed.manager.repo.model.OnlineModule;
-import org.lsposed.manager.ui.widget.EmptyStateRecyclerView;
-import org.lsposed.manager.util.ModuleUtil;
-
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.FormatStyle;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
-
-import rikka.core.util.LabelComparator;
-import rikka.core.util.ResourceUtils;
-import rikka.recyclerview.RecyclerViewKt;
-
-public class RepoFragment extends BaseFragment implements RepoLoader.RepoListener, ModuleUtil.ModuleListener, MenuProvider {
-    protected FragmentRepoBinding binding;
-    protected SearchView searchView;
-    private SearchView.OnQueryTextListener mSearchListener;
-    private final Handler mHandler = new Handler(Looper.getMainLooper());
-    private boolean preLoadWebview = true;
-
-    private final RepoLoader repoLoader = RepoLoader.getInstance();
-    private final ModuleUtil moduleUtil = ModuleUtil.getInstance();
-    private RepoAdapter adapter;
-    private final RecyclerView.AdapterDataObserver observer = new RecyclerView.AdapterDataObserver() {
-        @Override
-        public void onChanged() {
-            binding.swipeRefreshLayout.setRefreshing(!adapter.isLoaded());
+    private val repoLoader: RepoLoader? = RepoLoader.instance
+    private val moduleUtil: ModuleUtil? = ModuleUtil.instance
+    private var adapter: RepoAdapter? = null
+    private val observer: AdapterDataObserver = object : AdapterDataObserver() {
+        override fun onChanged() {
+            binding!!.swipeRefreshLayout.setRefreshing(!adapter!!.isDataLoaded())
         }
-    };
-
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        mSearchListener = new SearchView.OnQueryTextListener() {
-            @Override
-            public boolean onQueryTextSubmit(String query) {
-                adapter.getFilter().filter(query);
-                return false;
-            }
-
-            @Override
-            public boolean onQueryTextChange(String newText) {
-                adapter.getFilter().filter(newText);
-                return false;
-            }
-        };
-        super.onCreate(savedInstanceState);
     }
 
-    @Nullable
-    @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        binding = FragmentRepoBinding.inflate(getLayoutInflater(), container, false);
-        binding.appBar.setLiftable(true);
-        binding.recyclerView.getBorderViewDelegate().setBorderVisibilityChangedListener((top, oldTop, bottom, oldBottom) -> binding.appBar.setLifted(!top));
-        setupToolbar(binding.toolbar, binding.clickView, R.string.module_repo, R.menu.menu_repo);
-        binding.toolbar.setNavigationIcon(null);
-        adapter = new RepoAdapter();
-        adapter.setHasStableIds(true);
-        adapter.registerAdapterDataObserver(observer);
-        binding.recyclerView.setAdapter(adapter);
-        binding.recyclerView.setHasFixedSize(true);
-        binding.recyclerView.setLayoutManager(new LinearLayoutManager(requireActivity()));
-        RecyclerViewKt.fixEdgeEffect(binding.recyclerView, false, true);
-        binding.swipeRefreshLayout.setOnRefreshListener(adapter::fullRefresh);
-        binding.swipeRefreshLayout.setProgressViewEndTarget(true, binding.swipeRefreshLayout.getProgressViewEndOffset());
-        View.OnClickListener l = v -> {
-            if (searchView.isIconified()) {
-                binding.recyclerView.smoothScrollToPosition(0);
-                binding.appBar.setExpanded(true, true);
+    override fun onCreate(savedInstanceState: Bundle?) {
+        mSearchListener = object : SearchView.OnQueryTextListener {
+            override fun onQueryTextSubmit(query: String?): Boolean {
+                adapter!!.getFilter().filter(query)
+                return false
             }
-        };
-        binding.toolbar.setOnClickListener(l);
-        binding.clickView.setOnClickListener(l);
-        repoLoader.addListener(this);
-        moduleUtil.addListener(this);
-        onRepoLoaded();
-        return binding.getRoot();
+
+            override fun onQueryTextChange(newText: String?): Boolean {
+                adapter!!.getFilter().filter(newText)
+                return false
+            }
+        }
+        super.onCreate(savedInstanceState)
     }
 
-    private void updateRepoSummary() {
-        final int[] count = new int[]{0};
-        HashSet<String> processedModules = new HashSet<>();
-        var modules = moduleUtil.getModules();
-        if (modules != null && repoLoader.isRepoLoaded()) {
-            modules.forEach((k, v) -> {
-                        if (!processedModules.contains(k.first)) {
-                            var ver = repoLoader.getModuleLatestVersion(k.first);
-                            if (ver != null && ver.upgradable(v.versionCode, v.versionName)) {
-                                ++count[0];
-                            }
-                            processedModules.add(k.first);
-                        }
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        binding = FragmentRepoBinding.inflate(getLayoutInflater(), container, false)
+        binding!!.appBar.setLiftable(true)
+        binding!!.recyclerView.getBorderViewDelegate()
+            .setBorderVisibilityChangedListener(OnBorderVisibilityChangedListener { top: Boolean, oldTop: Boolean, bottom: Boolean, oldBottom: Boolean ->
+                binding!!.appBar.setLifted(!top)
+            })
+        setupToolbar(binding!!.toolbar, binding!!.clickView, R.string.module_repo, R.menu.menu_repo)
+        binding!!.toolbar.setNavigationIcon(null)
+        adapter = RepoAdapter()
+        adapter!!.setHasStableIds(true)
+        adapter!!.registerAdapterDataObserver(observer)
+        binding!!.recyclerView.setAdapter(adapter)
+        binding!!.recyclerView.setHasFixedSize(true)
+        binding!!.recyclerView.setLayoutManager(LinearLayoutManager(requireActivity()))
+        binding!!.recyclerView.fixEdgeEffect(false, true)
+        binding!!.swipeRefreshLayout.setOnRefreshListener(OnRefreshListener { adapter!!.fullRefresh() })
+        binding!!.swipeRefreshLayout.setProgressViewEndTarget(
+            true,
+            binding!!.swipeRefreshLayout.getProgressViewEndOffset()
+        )
+        val l = View.OnClickListener { v: View? ->
+            if (searchView!!.isIconified()) {
+                binding!!.recyclerView.smoothScrollToPosition(0)
+                binding!!.appBar.setExpanded(true, true)
+            }
+        }
+        binding!!.toolbar.setOnClickListener(l)
+        binding!!.clickView.setOnClickListener(l)
+        repoLoader?.addListener(this)
+        moduleUtil?.addListener(this)
+        onRepoLoaded()
+        return binding!!.getRoot()
+    }
+
+    private fun updateRepoSummary() {
+        val count = intArrayOf(0)
+        val processedModules = HashSet<String?>()
+        val modules = moduleUtil?.modules
+        if (modules != null && repoLoader?.isRepoLoaded == true) {
+            modules.forEach { (k: kotlin.Pair<String?, Int?>?, v: InstalledModule?) ->
+                if (!processedModules.contains(
+                        k!!.first
+                    )
+                ) {
+                    val ver = repoLoader.getModuleLatestVersion(k.first)
+                    if (ver != null && ver.upgradable(v!!.versionCode, v.versionName.toString())) {
+                        ++count[0]
                     }
-            );
+                    processedModules.add(k.first)
+                }
+            }
         } else {
-            count[0] = -1;
+            count[0] = -1
         }
-        runOnUiThread(() -> {
+        runOnUiThread(Runnable {
             if (binding != null) {
                 if (count[0] > 0) {
-                    binding.toolbar.setSubtitle(getResources().getQuantityString(R.plurals.module_repo_upgradable, count[0], count[0]));
+                    binding!!.toolbar.setSubtitle(
+                        getResources().getQuantityString(
+                            R.plurals.module_repo_upgradable,
+                            count[0],
+                            count[0]
+                        )
+                    )
                 } else if (count[0] == 0) {
-                    binding.toolbar.setSubtitle(getResources().getString(R.string.module_repo_up_to_date));
+                    binding!!.toolbar.setSubtitle(getResources().getString(R.string.module_repo_up_to_date))
                 } else {
-                    binding.toolbar.setSubtitle(getResources().getString(R.string.loading));
+                    binding!!.toolbar.setSubtitle(getResources().getString(R.string.loading))
                 }
-                binding.toolbarLayout.setSubtitle(binding.toolbar.getSubtitle());
+                binding!!.toolbarLayout.setSubtitle(binding!!.toolbar.getSubtitle())
             }
-        });
+        })
     }
 
-    @Override
-    public void onPrepareMenu(Menu menu) {
-        searchView = (SearchView) menu.findItem(R.id.menu_search).getActionView();
+    override fun onPrepareMenu(menu: Menu) {
+        searchView = menu.findItem(R.id.menu_search).getActionView() as SearchView?
         if (searchView != null) {
-            searchView.setOnQueryTextListener(mSearchListener);
-            searchView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-                @Override
-                public void onViewAttachedToWindow(@NonNull View arg0) {
-                    binding.appBar.setExpanded(false, true);
-                    binding.recyclerView.setNestedScrollingEnabled(false);
+            searchView!!.setOnQueryTextListener(mSearchListener)
+            searchView!!.addOnAttachStateChangeListener(object : OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(arg0: View) {
+                    binding!!.appBar.setExpanded(false, true)
+                    binding!!.recyclerView.setNestedScrollingEnabled(false)
                 }
 
-                @Override
-                public void onViewDetachedFromWindow(@NonNull View v) {
-                    binding.recyclerView.setNestedScrollingEnabled(true);
+                override fun onViewDetachedFromWindow(v: View) {
+                    binding!!.recyclerView.setNestedScrollingEnabled(true)
                 }
-            });
-            searchView.findViewById(androidx.appcompat.R.id.search_edit_frame).setLayoutDirection(View.LAYOUT_DIRECTION_INHERIT);
+            })
+            searchView!!.findViewById<View?>(androidx.appcompat.R.id.search_edit_frame)
+                .setLayoutDirection(
+                    View.LAYOUT_DIRECTION_INHERIT
+                )
         }
-        int sort = App.getPreferences().getInt("repo_sort", 0);
+        val sort = App.preferences.getInt("repo_sort", 0)
         if (sort == 0) {
-            menu.findItem(R.id.item_sort_by_name).setChecked(true);
+            menu.findItem(R.id.item_sort_by_name).setChecked(true)
         } else if (sort == 1) {
-            menu.findItem(R.id.item_sort_by_update_time).setChecked(true);
+            menu.findItem(R.id.item_sort_by_update_time).setChecked(true)
         }
-        menu.findItem(R.id.item_upgradable_first).setChecked(App.getPreferences().getBoolean("upgradable_first", true));
+        menu.findItem(R.id.item_upgradable_first)
+            .setChecked(App.preferences.getBoolean("upgradable_first", true))
     }
 
-    @Override
-    public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
+    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
     }
 
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
+    override fun onDestroyView() {
+        super.onDestroyView()
 
-        mHandler.removeCallbacksAndMessages(null);
-        repoLoader.removeListener(this);
-        moduleUtil.removeListener(this);
-        adapter.unregisterAdapterDataObserver(observer);
-        binding = null;
+        mHandler.removeCallbacksAndMessages(null)
+        repoLoader?.removeListener(this)
+        moduleUtil?.removeListener(this)
+        adapter!!.unregisterAdapterDataObserver(observer)
+        binding = null
     }
 
-    @Override
-    public void onResume() {
-        super.onResume();
-        adapter.refresh();
+    override fun onResume() {
+        super.onResume()
+        adapter!!.refresh()
         if (preLoadWebview) {
-            mHandler.postDelayed(() -> new WebView(requireContext()), 500);
-            preLoadWebview = false;
+            mHandler.postDelayed(Runnable { WebView(requireContext()) }, 500)
+            preLoadWebview = false
         }
     }
 
-    @Override
-    public void onRepoLoaded() {
+    override fun onRepoLoaded() {
         if (adapter != null) {
-            adapter.refresh();
+            adapter!!.refresh()
         }
-        updateRepoSummary();
+        updateRepoSummary()
     }
 
-    @Override
-    public void onThrowable(Throwable t) {
-        showHint(getString(R.string.repo_load_failed, t.getLocalizedMessage()), true);
-        updateRepoSummary();
+    override fun onThrowable(t: Throwable?) {
+        showHint(getString(R.string.repo_load_failed, t?.getLocalizedMessage()), true)
+        updateRepoSummary()
     }
 
-    @Override
-    public void onModulesReloaded() {
-        updateRepoSummary();
+    override fun onModulesReloaded() {
+        updateRepoSummary()
     }
 
-    @Override
-    public boolean onMenuItemSelected(@NonNull MenuItem item) {
-        int itemId = item.getItemId();
+    override fun onMenuItemSelected(item: MenuItem): Boolean {
+        val itemId = item.getItemId()
         if (itemId == R.id.item_sort_by_name) {
-            item.setChecked(true);
-            App.getPreferences().edit().putInt("repo_sort", 0).apply();
-            adapter.refresh();
+            item.setChecked(true)
+            App.preferences.edit { putInt("repo_sort", 0) }
+            adapter!!.refresh()
         } else if (itemId == R.id.item_sort_by_update_time) {
-            item.setChecked(true);
-            App.getPreferences().edit().putInt("repo_sort", 1).apply();
-            adapter.refresh();
+            item.setChecked(true)
+            App.preferences.edit { putInt("repo_sort", 1) }
+            adapter!!.refresh()
         } else if (itemId == R.id.item_upgradable_first) {
-            item.setChecked(!item.isChecked());
-            App.getPreferences().edit().putBoolean("upgradable_first", item.isChecked()).apply();
-            adapter.refresh();
+            item.setChecked(!item.isChecked())
+            App.preferences.edit { putBoolean("upgradable_first", item.isChecked()) }
+            adapter!!.refresh()
         } else {
-            return false;
+            return false
         }
-        return true;
+        return true
     }
 
-    private class RepoAdapter extends EmptyStateRecyclerView.EmptyStateAdapter<RepoAdapter.ViewHolder> implements Filterable {
-        private List<OnlineModule> fullList, showList;
-        private final LabelComparator labelComparator = new LabelComparator();
-        private boolean isLoaded = false;
-        private final Resources resources = App.getInstance().getResources();
-        private final String[] channels = resources.getStringArray(R.array.update_channel_values);
-        private String channel;
-        private final RepoLoader repoLoader = RepoLoader.getInstance();
+    private inner class RepoAdapter : EmptyStateAdapter<RepoAdapter.ViewHolder?>(), Filterable {
+        private var fullList: MutableList<OnlineModule>?
+        private var showList: MutableList<OnlineModule>?
+        private val labelComparator = LabelComparator()
+        override var isLoaded = false
+        private val resources: Resources? = App.instance?.getResources()
+        private val channels: Array<out String?>? =
+            resources?.getStringArray(R.array.update_channel_values)
+        private var channel: String? = null
+        private val repoLoader: RepoLoader? = RepoLoader.instance
 
-        RepoAdapter() {
-            fullList = showList = Collections.emptyList();
+        init {
+            showList = mutableListOf<OnlineModule?>() as MutableList<OnlineModule>?
+            fullList = showList
         }
 
-        @NonNull
-        @Override
-        public RepoAdapter.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            return new ViewHolder(ItemOnlinemoduleBinding.inflate(getLayoutInflater(), parent, false));
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            return ViewHolder(ItemOnlinemoduleBinding.inflate(getLayoutInflater(), parent, false))
         }
 
-        RepoLoader.ModuleVersion getUpgradableVer(OnlineModule module) {
-            ModuleUtil.InstalledModule installedModule = moduleUtil.getModule(module.getName());
+        fun getUpgradableVer(module: OnlineModule): RepoLoader.ModuleVersion? {
+            val installedModule = moduleUtil?.getModule(module.name)
             if (installedModule != null) {
-                var ver = repoLoader.getModuleLatestVersion(installedModule.packageName);
-                if (ver != null && ver.upgradable(installedModule.versionCode, installedModule.versionName))
-                    return ver;
+                val ver = repoLoader?.getModuleLatestVersion(installedModule.packageName)
+                if (ver != null && ver.upgradable(
+                        installedModule.versionCode,
+                        installedModule.versionName.toString()
+                    )
+                ) return ver
             }
-            return null;
+            return null
         }
 
-        @Override
-        public void onBindViewHolder(@NonNull RepoAdapter.ViewHolder holder, int position) {
-            OnlineModule module = showList.get(position);
-            holder.appName.setText(module.getDescription());
-            holder.appPackageName.setText(module.getName());
-            Instant instant;
-            channel = App.getPreferences().getString("update_channel", channels[0]);
-            var latestReleaseTime = repoLoader.getLatestReleaseTime(module.getName(), channel);
-            instant = Instant.parse(latestReleaseTime != null ? latestReleaseTime : module.getLatestReleaseTime());
-            var formatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT)
-                    .withLocale(App.getLocale()).withZone(ZoneId.systemDefault());
-            holder.publishedTime.setText(String.format(getString(R.string.module_repo_updated_time), formatter.format(instant)));
-            SpannableStringBuilder sb = new SpannableStringBuilder();
+        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+            super.onBindViewHolder(holder, position)
+            val module = showList!!.get(position)
+            holder.appName.setText(module.description)
+            holder.appPackageName.setText(module.name)
+            val instant: Instant?
+            channel = App.preferences.getString("update_channel", channels?.get(0))
+            val latestReleaseTime = repoLoader?.getLatestReleaseTime(module.name,
+                channel.toString()
+            )
+            instant =
+                Instant.parse(if (latestReleaseTime != null) latestReleaseTime else module.latestReleaseTime)
+            val formatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT)
+                .withLocale(App.getLocale(tag)).withZone(ZoneId.systemDefault())
+            holder.publishedTime.setText(
+                String.format(
+                    getString(R.string.module_repo_updated_time),
+                    formatter.format(instant)
+                )
+            )
+            var sb = SpannableStringBuilder()
 
-            String summary = module.getSummary();
+            val summary = module.summary
             if (summary != null) {
-                sb.append(summary);
+                sb.append(summary)
             }
-            holder.appDescription.setVisibility(View.VISIBLE);
-            holder.appDescription.setText(sb);
-            sb = new SpannableStringBuilder();
-            var upgradableVer = getUpgradableVer(module);
+            holder.appDescription.setVisibility(View.VISIBLE)
+            holder.appDescription.setText(sb)
+            sb = SpannableStringBuilder()
+            val upgradableVer = getUpgradableVer(module)
             if (upgradableVer != null) {
-                String hint = getString(R.string.update_available, upgradableVer.versionName);
-                sb.append(hint);
-                final ForegroundColorSpan foregroundColorSpan = new ForegroundColorSpan(ResourceUtils.resolveColor(requireActivity().getTheme(), com.google.android.material.R.attr.colorPrimary));
+                val hint = getString(R.string.update_available, upgradableVer.versionName)
+                sb.append(hint)
+                val foregroundColorSpan = ForegroundColorSpan(
+                    ResourceUtils.resolveColor(
+                        requireActivity().getTheme(),
+                        com.google.android.material.R.attr.colorPrimary
+                    )
+                )
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    final TypefaceSpan typefaceSpan = new TypefaceSpan(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-                    sb.setSpan(typefaceSpan, sb.length() - hint.length(), sb.length(), Spannable.SPAN_INCLUSIVE_INCLUSIVE);
+                    val typefaceSpan =
+                        TypefaceSpan(Typeface.create("sans-serif-medium", Typeface.NORMAL))
+                    sb.setSpan(
+                        typefaceSpan,
+                        sb.length - hint.length,
+                        sb.length,
+                        Spannable.SPAN_INCLUSIVE_INCLUSIVE
+                    )
                 } else {
-                    final StyleSpan styleSpan = new StyleSpan(Typeface.BOLD);
-                    sb.setSpan(styleSpan, sb.length() - hint.length(), sb.length(), Spannable.SPAN_INCLUSIVE_INCLUSIVE);
+                    val styleSpan = StyleSpan(Typeface.BOLD)
+                    sb.setSpan(
+                        styleSpan,
+                        sb.length - hint.length,
+                        sb.length,
+                        Spannable.SPAN_INCLUSIVE_INCLUSIVE
+                    )
                 }
-                sb.setSpan(foregroundColorSpan, sb.length() - hint.length(), sb.length(), Spannable.SPAN_INCLUSIVE_INCLUSIVE);
-            } else if (moduleUtil.getModule(module.getName()) != null) {
-                String installed = getString(R.string.installed);
-                sb.append(installed);
-                final StyleSpan styleSpan = new StyleSpan(Typeface.ITALIC);
-                sb.setSpan(styleSpan, sb.length() - installed.length(), sb.length(), Spannable.SPAN_INCLUSIVE_INCLUSIVE);
-                final ForegroundColorSpan foregroundColorSpan = new ForegroundColorSpan(ResourceUtils.resolveColor(requireActivity().getTheme(), com.google.android.material.R.attr.colorSecondary));
-                sb.setSpan(foregroundColorSpan, sb.length() - installed.length(), sb.length(), Spannable.SPAN_INCLUSIVE_INCLUSIVE);
+                sb.setSpan(
+                    foregroundColorSpan,
+                    sb.length - hint.length,
+                    sb.length,
+                    Spannable.SPAN_INCLUSIVE_INCLUSIVE
+                )
+            } else if (moduleUtil?.getModule(module.name) != null) {
+                val installed = getString(R.string.installed)
+                sb.append(installed)
+                val styleSpan = StyleSpan(Typeface.ITALIC)
+                sb.setSpan(
+                    styleSpan,
+                    sb.length - installed.length,
+                    sb.length,
+                    Spannable.SPAN_INCLUSIVE_INCLUSIVE
+                )
+                val foregroundColorSpan = ForegroundColorSpan(
+                    ResourceUtils.resolveColor(
+                        requireActivity().getTheme(),
+                        com.google.android.material.R.attr.colorSecondary
+                    )
+                )
+                sb.setSpan(
+                    foregroundColorSpan,
+                    sb.length - installed.length,
+                    sb.length,
+                    Spannable.SPAN_INCLUSIVE_INCLUSIVE
+                )
             }
-            if (sb.length() > 0) {
-                holder.hint.setVisibility(View.VISIBLE);
-                holder.hint.setText(sb);
+            if (sb.length > 0) {
+                holder.hint.setVisibility(View.VISIBLE)
+                holder.hint.setText(sb)
             } else {
-                holder.hint.setVisibility(View.GONE);
+                holder.hint.setVisibility(View.GONE)
             }
 
-            holder.itemView.setOnClickListener(v -> {
-                searchView.clearFocus();
-                safeNavigate(RepoFragmentDirections.actionRepoFragmentToRepoItemFragment(module.getName()));
-            });
-            holder.itemView.setTooltipText(module.getDescription());
+            holder.itemView.setOnClickListener(View.OnClickListener { v: View? ->
+                searchView!!.clearFocus()
+                safeNavigate(RepoFragmentDirections.actionRepoFragmentToRepoItemFragment(module.name as String))
+            })
+            holder.itemView.setTooltipText(module.description)
         }
 
-        @Override
-        public int getItemCount() {
-            return showList.size();
+        override fun getItemCount(): Int {
+            return showList!!.size
         }
 
         @SuppressLint("NotifyDataSetChanged")
-        private void setLoaded(List<OnlineModule> list, boolean isLoaded) {
-            runOnUiThread(() -> {
-                if (list != null) showList = list;
-                this.isLoaded = isLoaded;
-                notifyDataSetChanged();
-            });
+        fun setLoaded(list: MutableList<OnlineModule>?, isLoaded: Boolean) {
+            runOnUiThread(Runnable {
+                if (list != null) showList = list
+                this.isLoaded = isLoaded
+                notifyDataSetChanged()
+            })
         }
 
-        public void setData(Collection<OnlineModule> modules) {
-            if (modules == null) return;
-            setLoaded(null, false);
-            channel = App.getPreferences().getString("update_channel", channels[0]);
-            int sort = App.getPreferences().getInt("repo_sort", 0);
-            boolean upgradableFirst = App.getPreferences().getBoolean("upgradable_first", true);
-            ConcurrentHashMap<String, Boolean> upgradable = new ConcurrentHashMap<>();
-            fullList = modules.parallelStream().filter((onlineModule -> !onlineModule.isHide() && !(repoLoader.getReleases(onlineModule.getName()) != null && repoLoader.getReleases(onlineModule.getName()).isEmpty())))
-                    .sorted((a, b) -> {
-                        if (upgradableFirst) {
-                            var aUpgrade = upgradable.computeIfAbsent(a.getName(), n -> getUpgradableVer(a) != null);
-                            var bUpgrade = upgradable.computeIfAbsent(b.getName(), n -> getUpgradableVer(b) != null);
-                            if (aUpgrade && !bUpgrade) return -1;
-                            else if (!aUpgrade && bUpgrade) return 1;
+        fun setData(modules: MutableCollection<OnlineModule?>?) {
+            if (modules == null) return
+            setLoaded(null, false)
+            channel = App.preferences.getString("update_channel", channels?.get(0))
+            val sort = App.preferences.getInt("repo_sort", 0)
+            val upgradableFirst = App.preferences.getBoolean("upgradable_first", true)
+            val upgradable = ConcurrentHashMap<String?, Boolean>()
+            fullList = modules.parallelStream().filter((Predicate { onlineModule: OnlineModule? ->
+                onlineModule!!.isHide == true && !(repoLoader?.getReleases(
+                    onlineModule.name
+                ) != null && repoLoader.getReleases(onlineModule.name)!!
+                    .isEmpty())
+            }))
+                .sorted { a: OnlineModule?, b: OnlineModule? ->
+                    if (upgradableFirst) {
+                        val aUpgrade = upgradable.computeIfAbsent(a!!.name!!) { n: String? ->
+                            getUpgradableVer(
+                                a
+                            ) != null
                         }
-                        if (sort == 0) {
-                            return labelComparator.compare(a.getDescription(), b.getDescription());
-                        } else {
-                            return Instant.parse(repoLoader.getLatestReleaseTime(b.getName(), channel)).compareTo(Instant.parse(repoLoader.getLatestReleaseTime(a.getName(), channel)));
+                        val bUpgrade = upgradable.computeIfAbsent(b!!.name!!) { n: String? ->
+                            getUpgradableVer(
+                                b
+                            ) != null
                         }
-                    }).collect(Collectors.toList());
-            String queryStr = searchView != null ? searchView.getQuery().toString() : "";
-            runOnUiThread(() -> getFilter().filter(queryStr));
+                        if (aUpgrade && !bUpgrade) return@sorted -1
+                        else if (!aUpgrade && bUpgrade) return@sorted 1
+                    }
+                    if (sort == 0) {
+                        return@sorted labelComparator.compare(
+                            a!!.description,
+                            b!!.description
+                        )
+                    } else {
+                        return@sorted Instant.parse(
+                            repoLoader?.getLatestReleaseTime(
+                                b!!.name,
+                                channel.toString()
+                            )
+                        ).compareTo(
+                            Instant.parse(repoLoader?.getLatestReleaseTime(a!!.name,
+                                channel.toString()
+                            ))
+                        )
+                    }
+                }.collect(Collectors.toList())
+            val queryStr = if (searchView != null) searchView!!.getQuery().toString() else ""
+            runOnUiThread(Runnable { getFilter().filter(queryStr) })
         }
 
-        public void fullRefresh() {
-            runAsync(() -> {
-                setLoaded(null, false);
-                repoLoader.loadRemoteData();
-                refresh();
-            });
+        fun fullRefresh() {
+            runAsync(Runnable {
+                setLoaded(null, false)
+                repoLoader?.loadRemoteData()
+                refresh()
+            })
         }
 
-        public void refresh() {
-            runAsync(() -> adapter.setData(repoLoader.getOnlineModules()));
+        fun refresh() {
+            runAsync(Runnable { adapter!!.setData(repoLoader?.getOnlineModules()) })
         }
 
-        @Override
-        public long getItemId(int position) {
-            return showList.get(position).getName().hashCode();
+        override fun getItemId(position: Int): Long {
+            return showList!!.get(position).name.hashCode().toLong()
         }
 
-        @Override
-        public Filter getFilter() {
-            return new RepoAdapter.ModuleFilter();
+        override fun getFilter(): Filter {
+            return ModuleFilter()
         }
 
-        @Override
-        public boolean isLoaded() {
-            return isLoaded && repoLoader.isRepoLoaded();
+        fun isDataLoaded(): Boolean {
+            return isLoaded && repoLoader?.isRepoLoaded == true
         }
 
-        static class ViewHolder extends RecyclerView.ViewHolder {
-            ConstraintLayout root;
-            TextView appName;
-            TextView appPackageName;
-            TextView appDescription;
-            TextView hint;
-            TextView publishedTime;
+        inner class ViewHolder(binding: ItemOnlinemoduleBinding) :
+            RecyclerView.ViewHolder(binding.getRoot()) {
+            var root: ConstraintLayout?
+            var appName: TextView
+            var appPackageName: TextView
+            var appDescription: TextView
+            var hint: TextView
+            var publishedTime: TextView
 
-            ViewHolder(ItemOnlinemoduleBinding binding) {
-                super(binding.getRoot());
-                root = binding.itemRoot;
-                appName = binding.appName;
-                appPackageName = binding.appPackageName;
-                appDescription = binding.description;
-                hint = binding.hint;
-                publishedTime = binding.publishedTime;
+            init {
+                root = binding.itemRoot
+                appName = binding.appName
+                appPackageName = binding.appPackageName
+                appDescription = binding.description
+                hint = binding.hint
+                publishedTime = binding.publishedTime
             }
         }
 
-        class ModuleFilter extends Filter {
-
-            private boolean lowercaseContains(String s, String filter) {
-                return !TextUtils.isEmpty(s) && s.toLowerCase().contains(filter);
+        inner class ModuleFilter : Filter() {
+            private fun lowercaseContains(s: String?, filter: String): Boolean {
+                return !TextUtils.isEmpty(s) && s!!.lowercase(Locale.getDefault()).contains(filter)
             }
 
-            @Override
-            protected FilterResults performFiltering(CharSequence constraint) {
-                FilterResults filterResults = new FilterResults();
-                ArrayList<OnlineModule> filtered = new ArrayList<>();
-                String filter = constraint.toString().toLowerCase();
-                for (OnlineModule info : fullList) {
-                    if (lowercaseContains(info.getDescription(), filter) ||
-                            lowercaseContains(info.getName(), filter) ||
-                            lowercaseContains(info.getSummary(), filter)) {
-                        filtered.add(info);
+            override fun performFiltering(constraint: CharSequence): FilterResults {
+                val filterResults = FilterResults()
+                val filtered = ArrayList<OnlineModule?>()
+                val filter = constraint.toString().lowercase(Locale.getDefault())
+                for (info in fullList!!) {
+                    if (lowercaseContains(info.description, filter) ||
+                        lowercaseContains(info.name, filter) ||
+                        lowercaseContains(info.summary, filter)
+                    ) {
+                        filtered.add(info)
                     }
                 }
-                filterResults.values = filtered;
-                filterResults.count = filtered.size();
-                return filterResults;
+                filterResults.values = filtered
+                filterResults.count = filtered.size
+                return filterResults
             }
 
-            @Override
-            protected void publishResults(CharSequence constraint, FilterResults results) {
-                //noinspection unchecked
-                setLoaded((List<OnlineModule>) results.values, true);
+            override fun publishResults(constraint: CharSequence?, results: FilterResults) {
+                setLoaded(results.values as MutableList<OnlineModule>?, true)
             }
         }
     }

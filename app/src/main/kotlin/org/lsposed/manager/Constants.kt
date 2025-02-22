@@ -17,16 +17,15 @@
  * Copyright (C) 2020 EdXposed Contributors
  * Copyright (C) 2021 LSPosed Contributors
  */
+package org.lsposed.manager
 
-package org.lsposed.manager;
+import android.os.IBinder
+import org.lsposed.manager.receivers.LSPManagerServiceHolder.Companion.init
+import org.lsposed.manager.receivers.LSPManagerServiceHolder.Companion.service
 
-import android.os.IBinder;
-
-import org.lsposed.manager.receivers.LSPManagerServiceHolder;
-
-public class Constants {
-    public static boolean setBinder(IBinder binder) {
-        LSPManagerServiceHolder.init(binder);
-        return LSPManagerServiceHolder.getService().asBinder().isBinderAlive();
+object Constants {
+    fun setBinder(binder: IBinder): Boolean {
+        init(binder)
+        return service!!.asBinder().isBinderAlive()
     }
 }

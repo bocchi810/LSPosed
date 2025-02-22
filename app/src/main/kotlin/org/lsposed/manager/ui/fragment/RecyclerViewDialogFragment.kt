@@ -16,72 +16,78 @@
  *
  * Copyright (C) 2021 LSPosed Contributors
  */
+package org.lsposed.manager.ui.fragment
 
-package org.lsposed.manager.ui.fragment;
+import android.app.Dialog
+import android.os.Bundle
+import android.os.Parcelable
+import android.view.LayoutInflater
+import android.view.View
+import androidx.appcompat.app.AppCompatDialogFragment
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView.AdapterDataObserver
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout.OnRefreshListener
+import org.lsposed.lspd.models.UserInfo
+import org.lsposed.manager.R
+import org.lsposed.manager.databinding.DialogTitleBinding
+import org.lsposed.manager.databinding.SwiperefreshRecyclerviewBinding
+import org.lsposed.manager.ui.dialog.BlurBehindDialogBuilder
+import org.lsposed.manager.util.ModuleUtil.InstalledModule
 
-import android.app.Dialog;
-import android.os.Bundle;
-import android.view.LayoutInflater;
-import android.view.View;
+class RecyclerViewDialogFragment : AppCompatDialogFragment() {
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        val parent = getParentFragment()
+        val arguments = getArguments()
+        check(!(parent !is ModulesFragment || arguments == null))
+        val modulesFragment = parent
+        val user = arguments.getParcelable<Parcelable?>("userInfo") as UserInfo?
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatDialogFragment;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
+        val pickAdaptor = modulesFragment.createPickModuleAdapter(user!!)
+        val binding = SwiperefreshRecyclerviewBinding.inflate(
+            LayoutInflater.from(requireActivity()),
+            null,
+            false
+        )
 
-import org.lsposed.lspd.models.UserInfo;
-import org.lsposed.manager.R;
-import org.lsposed.manager.databinding.DialogTitleBinding;
-import org.lsposed.manager.databinding.SwiperefreshRecyclerviewBinding;
-import org.lsposed.manager.ui.dialog.BlurBehindDialogBuilder;
-import org.lsposed.manager.util.ModuleUtil;
-
-public class RecyclerViewDialogFragment extends AppCompatDialogFragment {
-    @Override
-    @NonNull
-    public Dialog onCreateDialog(Bundle savedInstanceState) {
-        var parent = getParentFragment();
-        var arguments = getArguments();
-        if (!(parent instanceof ModulesFragment) || arguments == null) {
-            throw new IllegalStateException();
-        }
-        var modulesFragment = (ModulesFragment) parent;
-        var user = (UserInfo) arguments.getParcelable("userInfo");
-
-        var pickAdaptor = modulesFragment.createPickModuleAdapter(user);
-        var binding = SwiperefreshRecyclerviewBinding.inflate(LayoutInflater.from(requireActivity()), null, false);
-
-        binding.recyclerView.setAdapter(pickAdaptor);
-        binding.recyclerView.setLayoutManager(new LinearLayoutManager(requireActivity()));
-        pickAdaptor.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
-            @Override
-            public void onChanged() {
-                binding.swipeRefreshLayout.setRefreshing(!pickAdaptor.isLoaded());
+        binding.recyclerView.setAdapter(pickAdaptor)
+        binding.recyclerView.setLayoutManager(LinearLayoutManager(requireActivity()))
+        pickAdaptor.registerAdapterDataObserver(object : AdapterDataObserver() {
+            override fun onChanged() {
+                binding.swipeRefreshLayout.setRefreshing(!pickAdaptor.isDataLoaded())
             }
-        });
-        binding.swipeRefreshLayout.setProgressViewEndTarget(true, binding.swipeRefreshLayout.getProgressViewEndOffset());
-        binding.swipeRefreshLayout.setOnRefreshListener(pickAdaptor::fullRefresh);
-        pickAdaptor.refresh();
-        var title = DialogTitleBinding.inflate(getLayoutInflater()).getRoot();
-        title.setText(getString(R.string.install_to_user, user.name));
-        var dialog = new BlurBehindDialogBuilder(requireActivity(), R.style.ThemeOverlay_MaterialAlertDialog_FullWidthButtons)
-                .setCustomTitle(title)
-                .setView(binding.getRoot())
-                .setNegativeButton(android.R.string.cancel, null)
-                .create();
-        title.setOnClickListener(s -> binding.recyclerView.smoothScrollToPosition(0));
-        pickAdaptor.setOnPickListener(picked -> {
-            var module = (ModuleUtil.InstalledModule) picked.getTag();
-            modulesFragment.installModuleToUser(module, user);
-            dialog.dismiss();
-        });
-        onViewCreated(binding.getRoot(), savedInstanceState);
-        return dialog;
+        })
+        binding.swipeRefreshLayout.setProgressViewEndTarget(
+            true,
+            binding.swipeRefreshLayout.getProgressViewEndOffset()
+        )
+        binding.swipeRefreshLayout.setOnRefreshListener(OnRefreshListener { pickAdaptor.fullRefresh() })
+        pickAdaptor.refresh()
+        val title = DialogTitleBinding.inflate(getLayoutInflater()).getRoot()
+        title.setText(getString(R.string.install_to_user, user.name))
+        val dialog = BlurBehindDialogBuilder(
+            requireActivity(),
+            R.style.ThemeOverlay_MaterialAlertDialog_FullWidthButtons
+        )
+            .setCustomTitle(title)
+            .setView(binding.getRoot())
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        title.setOnClickListener(View.OnClickListener { s: View? ->
+            binding.recyclerView.smoothScrollToPosition(
+                0
+            )
+        })
+        pickAdaptor.setOnPickListener(View.OnClickListener { picked: View? ->
+            val module = picked!!.getTag() as InstalledModule
+            modulesFragment.installModuleToUser(module, user)
+            dialog.dismiss()
+        })
+        onViewCreated(binding.getRoot(), savedInstanceState)
+        return dialog
     }
 
     // prevent from overriding
-    public final void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        super.onViewCreated(view, savedInstanceState);
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
     }
 }

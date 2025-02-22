@@ -17,27 +17,16 @@
  * Copyright (C) 2020 EdXposed Contributors
  * Copyright (C) 2021 LSPosed Contributors
  */
+package org.lsposed.manager.util.chrome
 
-package org.lsposed.manager.util.chrome;
+import android.app.Activity
+import android.text.style.URLSpan
+import android.view.View
+import org.lsposed.manager.util.NavUtil.startURL
 
-import android.app.Activity;
-import android.text.style.URLSpan;
-import android.view.View;
-
-import org.lsposed.manager.util.NavUtil;
-
-public class CustomTabsURLSpan extends URLSpan {
-
-    private final Activity activity;
-
-    public CustomTabsURLSpan(Activity activity, String url) {
-        super(url);
-        this.activity = activity;
-    }
-
-    @Override
-    public void onClick(View widget) {
-        String url = getURL();
-        NavUtil.startURL(activity, url);
+class CustomTabsURLSpan(private val activity: Activity, url: String?) : URLSpan(url) {
+    override fun onClick(widget: View) {
+        val url = getURL()
+        startURL(activity, url)
     }
 }

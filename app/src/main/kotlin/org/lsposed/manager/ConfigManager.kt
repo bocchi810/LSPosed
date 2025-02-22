@@ -16,397 +16,458 @@
  *
  * Copyright (C) 2021 LSPosed Contributors
  */
+package org.lsposed.manager
 
-package org.lsposed.manager;
+import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
+import android.os.ParcelFileDescriptor
+import android.os.RemoteException
+import android.util.Log
+import org.lsposed.lspd.ILSPManagerService
+import org.lsposed.lspd.models.Application
+import org.lsposed.lspd.models.UserInfo
+import org.lsposed.manager.receivers.LSPManagerServiceHolder.Companion.service
+import org.lsposed.manager.ui.adapters.ScopeAdapter.ApplicationWithEquals
+import java.io.File
+import java.util.Arrays
+import java.util.function.Consumer
 
-import android.content.Intent;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
-import android.os.ParcelFileDescriptor;
-import android.os.RemoteException;
-import android.util.Log;
+object ConfigManager {
+    val isBinderAlive: Boolean
+        get() = service != null
 
-import org.lsposed.lspd.ILSPManagerService;
-import org.lsposed.lspd.models.Application;
-import org.lsposed.lspd.models.UserInfo;
-import org.lsposed.manager.adapters.ScopeAdapter;
-import org.lsposed.manager.receivers.LSPManagerServiceHolder;
+    val xposedApiVersion: Int
+        get() {
+            try {
+                return service!!.getXposedApiVersion()
+            } catch (e: RemoteException) {
+                Log.e(
+                    App.TAG,
+                    Log.getStackTraceString(e)
+                )
+                return -1
+            }
+        }
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
+    val xposedVersionName: String?
+        get() {
+            try {
+                return service!!.getXposedVersionName()
+            } catch (e: RemoteException) {
+                Log.e(
+                    App.TAG,
+                    Log.getStackTraceString(e)
+                )
+                return ""
+            }
+        }
 
-public class ConfigManager {
+    val xposedVersionCode: Int
+        get() {
+            try {
+                return service!!.getXposedVersionCode()
+            } catch (e: RemoteException) {
+                Log.e(
+                    App.TAG,
+                    Log.getStackTraceString(e)
+                )
+                return -1
+            }
+        }
 
-    public static boolean isBinderAlive() {
-        return LSPManagerServiceHolder.getService() != null;
+    fun getInstalledPackagesFromAllUsers(
+        flags: Int,
+        filterNoProcess: Boolean
+    ): MutableList<PackageInfo?> {
+        val list: MutableList<PackageInfo?> = ArrayList<PackageInfo?>()
+        try {
+            list.addAll(
+                service!!.getInstalledPackagesFromAllUsers(flags, filterNoProcess).getList()
+            )
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+        }
+        return list
     }
 
-    public static int getXposedApiVersion() {
+    val enabledModules: Array<String?>?
+        get() {
+            try {
+                return service!!.enabledModules()
+            } catch (e: RemoteException) {
+                Log.e(
+                    App.TAG,
+                    Log.getStackTraceString(e)
+                )
+                return arrayOfNulls<String>(0)
+            }
+        }
+
+    fun setModuleEnabled(packageName: String?, enable: Boolean): Boolean {
         try {
-            return LSPManagerServiceHolder.getService().getXposedApiVersion();
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return -1;
+            return if (enable) service!!.enableModule(packageName) else service!!.disableModule(
+                packageName
+            )
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static String getXposedVersionName() {
+    fun setModuleScope(
+        packageName: String?,
+        legacy: Boolean,
+        applications: MutableSet<ApplicationWithEquals?>
+    ): Boolean {
         try {
-            return LSPManagerServiceHolder.getService().getXposedVersionName();
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return "";
-        }
-    }
-
-    public static int getXposedVersionCode() {
-        try {
-            return LSPManagerServiceHolder.getService().getXposedVersionCode();
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return -1;
-        }
-    }
-
-    public static List<PackageInfo> getInstalledPackagesFromAllUsers(int flags, boolean filterNoProcess) {
-        List<PackageInfo> list = new ArrayList<>();
-        try {
-            list.addAll(LSPManagerServiceHolder.getService().getInstalledPackagesFromAllUsers(flags, filterNoProcess).getList());
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-        }
-        return list;
-    }
-
-    public static String[] getEnabledModules() {
-        try {
-            return LSPManagerServiceHolder.getService().enabledModules();
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return new String[0];
-        }
-    }
-
-    public static boolean setModuleEnabled(String packageName, boolean enable) {
-        try {
-            return enable ? LSPManagerServiceHolder.getService().enableModule(packageName) : LSPManagerServiceHolder.getService().disableModule(packageName);
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
-        }
-    }
-
-    public static boolean setModuleScope(String packageName, boolean legacy, Set<ScopeAdapter.ApplicationWithEquals> applications) {
-        try {
-            List<Application> list = new ArrayList<>();
-            applications.forEach(application -> {
-                Application app = new Application();
-                app.userId = application.userId;
-                app.packageName = application.packageName;
-                list.add(app);
-            });
+            val list: MutableList<Application?> = ArrayList<Application?>()
+            applications.forEach(Consumer { application: ApplicationWithEquals? ->
+                val app = Application()
+                app.userId = application!!.userId
+                app.packageName = application.packageName
+                list.add(app)
+            })
             if (legacy) {
-                Application app = new Application();
-                app.userId = 0;
-                app.packageName = packageName;
-                list.add(app);
+                val app = Application()
+                app.userId = 0
+                app.packageName = packageName
+                list.add(app)
             }
-            return LSPManagerServiceHolder.getService().setModuleScope(packageName, list);
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
+            return service!!.setModuleScope(packageName, list)
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static List<ScopeAdapter.ApplicationWithEquals> getModuleScope(String packageName) {
-        List<ScopeAdapter.ApplicationWithEquals> list = new ArrayList<>();
+    fun getModuleScope(packageName: String?): MutableList<ApplicationWithEquals?> {
+        val list: MutableList<ApplicationWithEquals?> = ArrayList<ApplicationWithEquals?>()
         try {
-            var applications = LSPManagerServiceHolder.getService().getModuleScope(packageName);
+            val applications = service!!.getModuleScope(packageName)
             if (applications == null) {
-                return list;
+                return list
             }
-            applications.forEach(application -> {
-                if (!application.packageName.equals(packageName)) {
-                    list.add(new ScopeAdapter.ApplicationWithEquals(application));
+            applications.forEach(Consumer { application: Application? ->
+                if (application!!.packageName != packageName) {
+                    list.add(ApplicationWithEquals(application))
                 }
-            });
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
+            })
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
         }
-        return list;
+        return list
     }
 
-    public static boolean enableStatusNotification() {
+    fun enableStatusNotification(): Boolean {
         try {
-            return LSPManagerServiceHolder.getService().enableStatusNotification();
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
-        }
-    }
-
-    public static boolean setEnableStatusNotification(boolean enabled) {
-        try {
-            LSPManagerServiceHolder.getService().setEnableStatusNotification(enabled);
-            return true;
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
+            return service!!.enableStatusNotification()
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static boolean isVerboseLogEnabled() {
+    fun setEnableStatusNotification(enabled: Boolean): Boolean {
         try {
-            return LSPManagerServiceHolder.getService().isVerboseLog();
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
+            service!!.setEnableStatusNotification(enabled)
+            return true
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static boolean setVerboseLogEnabled(boolean enabled) {
+    val isVerboseLogEnabled: Boolean
+        get() {
+            try {
+                return service!!.isVerboseLog()
+            } catch (e: RemoteException) {
+                Log.e(
+                    App.TAG,
+                    Log.getStackTraceString(e)
+                )
+                return false
+            }
+        }
+
+    fun setVerboseLogEnabled(enabled: Boolean): Boolean {
         try {
-            LSPManagerServiceHolder.getService().setVerboseLog(enabled);
-            return true;
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
+            service!!.setVerboseLog(enabled)
+            return true
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static boolean isLogWatchdogEnabled() {
+    val isLogWatchdogEnabled: Boolean
+        get() {
+            try {
+                return service!!.isLogWatchdogEnabled()
+            } catch (e: RemoteException) {
+                Log.e(
+                    App.TAG,
+                    Log.getStackTraceString(e)
+                )
+                return false
+            }
+        }
+
+    fun setLogWatchdog(enabled: Boolean): Boolean {
         try {
-            return LSPManagerServiceHolder.getService().isLogWatchdogEnabled();
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
+            service!!.setLogWatchdog(enabled)
+            return true
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static boolean setLogWatchdog(boolean enabled) {
+    fun getLog(verbose: Boolean): ParcelFileDescriptor? {
         try {
-            LSPManagerServiceHolder.getService().setLogWatchdog(enabled);
-            return true;
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
+            return if (verbose) service!!.getVerboseLog() else service!!.getModulesLog()
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return null
         }
     }
 
-    public static ParcelFileDescriptor getLog(boolean verbose) {
+    fun clearLogs(verbose: Boolean): Boolean {
         try {
-            return verbose ? LSPManagerServiceHolder.getService().getVerboseLog() : LSPManagerServiceHolder.getService().getModulesLog();
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return null;
+            return service!!.clearLogs(verbose)
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static boolean clearLogs(boolean verbose) {
+    @Throws(PackageManager.NameNotFoundException::class)
+    fun getPackageInfo(packageName: String?, flags: Int, userId: Int): PackageInfo {
         try {
-            return LSPManagerServiceHolder.getService().clearLogs(verbose);
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
+            val info = service!!.getPackageInfo(packageName, flags, userId)
+            if (info == null) throw PackageManager.NameNotFoundException()
+            return info
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            throw PackageManager.NameNotFoundException()
         }
     }
 
-    public static PackageInfo getPackageInfo(String packageName, int flags, int userId) throws PackageManager.NameNotFoundException {
+    fun forceStopPackage(packageName: String?, userId: Int): Boolean {
         try {
-            var info = LSPManagerServiceHolder.getService().getPackageInfo(packageName, flags, userId);
-            if (info == null) throw new PackageManager.NameNotFoundException();
-            return info;
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            throw new PackageManager.NameNotFoundException();
+            service!!.forceStopPackage(packageName, userId)
+            return true
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static boolean forceStopPackage(String packageName, int userId) {
+    fun reboot(): Boolean {
         try {
-            LSPManagerServiceHolder.getService().forceStopPackage(packageName, userId);
-            return true;
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
+            service!!.reboot()
+            return true
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static boolean reboot() {
+    fun uninstallPackage(packageName: String?, userId: Int): Boolean {
         try {
-            LSPManagerServiceHolder.getService().reboot();
-            return true;
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
+            return service!!.uninstallPackage(packageName, userId)
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static boolean uninstallPackage(String packageName, int userId) {
+    val isSepolicyLoaded: Boolean
+        get() {
+            try {
+                return service!!.isSepolicyLoaded()
+            } catch (e: RemoteException) {
+                Log.e(
+                    App.TAG,
+                    Log.getStackTraceString(e)
+                )
+                return false
+            }
+        }
+
+    val users: MutableList<UserInfo?>?
+        get() {
+            try {
+                return service!!.getUsers()
+            } catch (e: RemoteException) {
+                Log.e(
+                    App.TAG,
+                    Log.getStackTraceString(e)
+                )
+                return null
+            }
+        }
+
+    fun installExistingPackageAsUser(packageName: String?, userId: Int): Boolean {
+        val INSTALL_SUCCEEDED = 1
         try {
-            return LSPManagerServiceHolder.getService().uninstallPackage(packageName, userId);
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
+            val ret = service!!.installExistingPackageAsUser(packageName, userId)
+            return ret == INSTALL_SUCCEEDED
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static boolean isSepolicyLoaded() {
+    val isMagiskInstalled: Boolean
+        get() {
+            val path = System.getenv("PATH")
+            if (path == null) return false
+            else return Arrays.stream<String?>(
+                path.split(File.pathSeparator.toRegex()).dropLastWhile { it.isEmpty() }
+                    .toTypedArray())
+                .anyMatch { str: String? -> File(str, "magisk").exists() }
+        }
+
+    fun systemServerRequested(): Boolean {
         try {
-            return LSPManagerServiceHolder.getService().isSepolicyLoaded();
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
+            return service!!.systemServerRequested()
+        } catch (e: RemoteException) {
+            return false
         }
     }
 
-    public static List<UserInfo> getUsers() {
+    fun dex2oatFlagsLoaded(): Boolean {
         try {
-            return LSPManagerServiceHolder.getService().getUsers();
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return null;
+            return service!!.dex2oatFlagsLoaded()
+        } catch (e: RemoteException) {
+            return false
         }
     }
 
-    public static boolean installExistingPackageAsUser(String packageName, int userId) {
-        final int INSTALL_SUCCEEDED = 1;
+    fun startActivityAsUserWithFeature(intent: Intent?, userId: Int): Int {
         try {
-            var ret = LSPManagerServiceHolder.getService().installExistingPackageAsUser(packageName, userId);
-            return ret == INSTALL_SUCCEEDED;
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
+            return service!!.startActivityAsUserWithFeature(intent, userId)
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return -1
         }
     }
 
-    public static boolean isMagiskInstalled() {
-        var path = System.getenv("PATH");
-        if (path == null) return false;
-        else return Arrays.stream(path.split(File.pathSeparator))
-                .anyMatch(str -> new File(str, "magisk").exists());
+    fun queryIntentActivitiesAsUser(
+        intent: Intent?,
+        flags: Int,
+        userId: Int
+    ): MutableList<ResolveInfo?> {
+        val list: MutableList<ResolveInfo?> = ArrayList<ResolveInfo?>()
+        try {
+            list.addAll(service!!.queryIntentActivitiesAsUser(intent, flags, userId).getList())
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+        }
+        return list
     }
 
-    public static boolean systemServerRequested() {
+    fun setHiddenIcon(hide: Boolean): Boolean {
         try {
-            return LSPManagerServiceHolder.getService().systemServerRequested();
-        } catch (RemoteException e) {
-            return false;
+            service!!.setHiddenIcon(hide)
+            return true
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static boolean dex2oatFlagsLoaded() {
+    val api: String?
+        get() {
+            try {
+                return service!!.getApi()
+            } catch (e: RemoteException) {
+                Log.e(
+                    App.TAG,
+                    Log.getStackTraceString(e)
+                )
+                return e.toString()
+            }
+        }
+
+    val denyListPackages: MutableList<String?>
+        get() {
+            val list: MutableList<String?> =
+                ArrayList<String?>()
+            try {
+                list.addAll(service!!.getDenyListPackages())
+            } catch (e: RemoteException) {
+                Log.e(
+                    App.TAG,
+                    Log.getStackTraceString(e)
+                )
+            }
+            return list
+        }
+
+    fun flashZip(zipPath: String?, outputStream: ParcelFileDescriptor?) {
         try {
-            return LSPManagerServiceHolder.getService().dex2oatFlagsLoaded();
-        } catch (RemoteException e) {
-            return false;
+            service!!.flashZip(zipPath, outputStream)
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
         }
     }
 
-    public static int startActivityAsUserWithFeature(Intent intent, int userId) {
+    val isDexObfuscateEnabled: Boolean
+        get() {
+            try {
+                return service!!.getDexObfuscate()
+            } catch (e: RemoteException) {
+                Log.e(
+                    App.TAG,
+                    Log.getStackTraceString(e)
+                )
+                return false
+            }
+        }
+
+    fun setDexObfuscateEnabled(enabled: Boolean): Boolean {
         try {
-            return LSPManagerServiceHolder.getService().startActivityAsUserWithFeature(intent, userId);
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return -1;
+            service!!.setDexObfuscate(enabled)
+            return true
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static List<ResolveInfo> queryIntentActivitiesAsUser(Intent intent, int flags, int userId) {
-        List<ResolveInfo> list = new ArrayList<>();
-        try {
-            list.addAll(LSPManagerServiceHolder.getService().queryIntentActivitiesAsUser(intent, flags, userId).getList());
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
+    val dex2OatWrapperCompatibility: Int
+        get() {
+            try {
+                return service!!.getDex2OatWrapperCompatibility()
+            } catch (e: RemoteException) {
+                Log.e(
+                    App.TAG,
+                    Log.getStackTraceString(e)
+                )
+                return ILSPManagerService.DEX2OAT_CRASHED
+            }
         }
-        return list;
-    }
 
-    public static boolean setHiddenIcon(boolean hide) {
+    fun getAutoInclude(packageName: String?): Boolean {
         try {
-            LSPManagerServiceHolder.getService().setHiddenIcon(hide);
-            return true;
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
-        }
-    }
-
-    public static String getApi() {
-        try {
-            return LSPManagerServiceHolder.getService().getApi();
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return e.toString();
+            return service!!.getAutoInclude(packageName)
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 
-    public static List<String> getDenyListPackages() {
-        List<String> list = new ArrayList<>();
+    fun setAutoInclude(packageName: String?, enable: Boolean): Boolean {
         try {
-            list.addAll(LSPManagerServiceHolder.getService().getDenyListPackages());
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-        }
-        return list;
-    }
-
-    public static void flashZip(String zipPath, ParcelFileDescriptor outputStream) {
-        try {
-            LSPManagerServiceHolder.getService().flashZip(zipPath, outputStream);
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-        }
-    }
-
-    public static boolean isDexObfuscateEnabled() {
-        try {
-            return LSPManagerServiceHolder.getService().getDexObfuscate();
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
-        }
-    }
-
-    public static boolean setDexObfuscateEnabled(boolean enabled) {
-        try {
-            LSPManagerServiceHolder.getService().setDexObfuscate(enabled);
-            return true;
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
-        }
-    }
-
-    public static int getDex2OatWrapperCompatibility() {
-        try {
-            return LSPManagerServiceHolder.getService().getDex2OatWrapperCompatibility();
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return ILSPManagerService.DEX2OAT_CRASHED;
-        }
-    }
-
-    public static boolean getAutoInclude(String packageName) {
-        try {
-            return LSPManagerServiceHolder.getService().getAutoInclude(packageName);
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
-        }
-    }
-
-    public static boolean setAutoInclude(String packageName, boolean enable) {
-        try {
-            LSPManagerServiceHolder.getService().setAutoInclude(packageName, enable);
-            return true;
-        } catch (RemoteException e) {
-            Log.e(App.TAG, Log.getStackTraceString(e));
-            return false;
+            service!!.setAutoInclude(packageName, enable)
+            return true
+        } catch (e: RemoteException) {
+            Log.e(App.TAG, Log.getStackTraceString(e))
+            return false
         }
     }
 }

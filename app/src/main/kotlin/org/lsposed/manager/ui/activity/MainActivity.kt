@@ -16,127 +16,116 @@
  *
  * Copyright (C) 2021 LSPosed Contributors-->
  */
+package org.lsposed.manager.ui.activity
 
-package org.lsposed.manager.ui.activity;
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.text.TextUtils
+import android.util.Log
+import android.view.KeyEvent
+import android.view.MotionEvent
+import androidx.core.util.Pair
+import androidx.navigation.NavOptions
+import androidx.navigation.Navigation.findNavController
+import androidx.navigation.fragment.NavHostFragment
+import androidx.navigation.ui.NavigationUI.setupWithNavController
+import com.google.android.material.navigation.NavigationBarView
+import org.lsposed.manager.App
+import org.lsposed.manager.ConfigManager
+import org.lsposed.manager.R
+import org.lsposed.manager.databinding.ActivityMainBinding
+import org.lsposed.manager.repo.RepoLoader
+import org.lsposed.manager.repo.RepoLoader.RepoListener
+import org.lsposed.manager.ui.activity.base.BaseActivity
+import org.lsposed.manager.util.ModuleUtil
+import org.lsposed.manager.util.ModuleUtil.InstalledModule
+import org.lsposed.manager.util.ModuleUtil.ModuleListener
+import org.lsposed.manager.util.ShortcutUtil
+import org.lsposed.manager.util.UpdateUtil
+import rikka.core.util.ResourceUtils
 
-import android.annotation.SuppressLint;
-import android.content.Context;
-import android.content.Intent;
-import android.net.Uri;
-import android.os.Build;
-import android.os.Bundle;
-import android.text.TextUtils;
-import android.util.Log;
-import android.view.KeyEvent;
-import android.view.MotionEvent;
+class MainActivity : BaseActivity(), RepoListener, ModuleListener {
+    private var restarting = false
+    private var binding: ActivityMainBinding? = null
 
-import androidx.annotation.NonNull;
-import androidx.navigation.NavController;
-import androidx.navigation.NavOptions;
-import androidx.navigation.Navigation;
-import androidx.navigation.fragment.NavHostFragment;
-import androidx.navigation.ui.NavigationUI;
-
-import com.google.android.material.navigation.NavigationBarView;
-
-import org.lsposed.manager.App;
-import org.lsposed.manager.ConfigManager;
-import org.lsposed.manager.R;
-import org.lsposed.manager.databinding.ActivityMainBinding;
-import org.lsposed.manager.repo.RepoLoader;
-import org.lsposed.manager.ui.activity.base.BaseActivity;
-import org.lsposed.manager.util.ModuleUtil;
-import org.lsposed.manager.util.ShortcutUtil;
-import org.lsposed.manager.util.UpdateUtil;
-
-import java.util.HashSet;
-import java.util.Objects;
-
-import rikka.core.util.ResourceUtils;
-
-public class MainActivity extends BaseActivity implements RepoLoader.RepoListener, ModuleUtil.ModuleListener {
-    private static final String KEY_PREFIX = MainActivity.class.getName() + '.';
-    private static final String EXTRA_SAVED_INSTANCE_STATE = KEY_PREFIX + "SAVED_INSTANCE_STATE";
-
-    private static final RepoLoader repoLoader = RepoLoader.getInstance();
-    private static final ModuleUtil moduleUtil = ModuleUtil.getInstance();
-
-    private boolean restarting;
-    private ActivityMainBinding binding;
-
-    @NonNull
-    public static Intent newIntent(@NonNull Context context) {
-        return new Intent(context, MainActivity.class);
-    }
-
-    @NonNull
-    private static Intent newIntent(@NonNull Bundle savedInstanceState, @NonNull Context context) {
-        return newIntent(context)
-                .putExtra(EXTRA_SAVED_INSTANCE_STATE, savedInstanceState);
-    }
-
-    @Override
-    public void onCreate(Bundle savedInstanceState) {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        var savedInstanceState = savedInstanceState
         if (savedInstanceState == null) {
-            savedInstanceState = getIntent().getBundleExtra(EXTRA_SAVED_INSTANCE_STATE);
+            savedInstanceState = getIntent().getBundleExtra(EXTRA_SAVED_INSTANCE_STATE)
         }
-        super.onCreate(savedInstanceState);
+        super.onCreate(savedInstanceState)
 
-        binding = ActivityMainBinding.inflate(getLayoutInflater());
-        setContentView(binding.getRoot());
+        binding = ActivityMainBinding.inflate(getLayoutInflater())
+        setContentView(binding!!.getRoot())
 
-        repoLoader.addListener(this);
-        moduleUtil.addListener(this);
+        repoLoader?.addListener(this)
+        moduleUtil?.addListener(this)
 
-        onModulesReloaded();
+        onModulesReloaded()
 
-        NavHostFragment navHostFragment = (NavHostFragment) getSupportFragmentManager().findFragmentById(R.id.nav_host_fragment);
+        val navHostFragment =
+            getSupportFragmentManager().findFragmentById(R.id.nav_host_fragment) as NavHostFragment?
         if (navHostFragment == null) {
-            return;
+            return
         }
 
-        NavController navController = navHostFragment.getNavController();
-        var nav = (NavigationBarView) binding.nav;
-        NavigationUI.setupWithNavController(nav, navController);
+        val navController = navHostFragment.navController
+        val nav = binding!!.nav as NavigationBarView
+        setupWithNavController(nav, navController)
 
-        handleIntent(getIntent());
+        handleIntent(getIntent())
     }
 
-    @Override
-    protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
-        handleIntent(intent);
+    protected override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
     }
 
-    private void handleIntent(Intent intent) {
+    private fun handleIntent(intent: Intent?) {
         if (intent == null) {
-            return;
+            return
         }
-        NavHostFragment navHostFragment = (NavHostFragment) getSupportFragmentManager().findFragmentById(R.id.nav_host_fragment);
+        val navHostFragment =
+            getSupportFragmentManager().findFragmentById(R.id.nav_host_fragment) as NavHostFragment?
         if (navHostFragment == null) {
-            return;
+            return
         }
-        NavController navController = navHostFragment.getNavController();
-        var nav = (NavigationBarView) binding.nav;
-        if (intent.getAction() != null && intent.getAction().equals("android.intent.action.APPLICATION_PREFERENCES")) {
-            nav.setSelectedItemId(R.id.settings_fragment);
-        } else if (ConfigManager.isBinderAlive()) {
+        val navController = navHostFragment.navController
+        val nav = binding!!.nav as NavigationBarView
+        if (intent.getAction() != null && intent.getAction() == "android.intent.action.APPLICATION_PREFERENCES") {
+            nav.setSelectedItemId(R.id.settings_fragment)
+        } else if (ConfigManager.isBinderAlive) {
             if (!TextUtils.isEmpty(intent.getDataString())) {
-                switch (intent.getDataString()) {
-                    case "modules" -> nav.setSelectedItemId(R.id.modules_nav);
-                    case "logs" -> nav.setSelectedItemId(R.id.logs_fragment);
-                    case "repo" -> {
-                        if (ConfigManager.isMagiskInstalled()) {
-                            nav.setSelectedItemId(R.id.repo_nav);
+                when (intent.getDataString()) {
+                    "modules" -> nav.setSelectedItemId(R.id.modules_nav)
+                    "logs" -> nav.setSelectedItemId(R.id.logs_fragment)
+                    "repo" -> {
+                        if (ConfigManager.isMagiskInstalled) {
+                            nav.setSelectedItemId(R.id.repo_nav)
                         }
                     }
-                    case "settings" -> nav.setSelectedItemId(R.id.settings_fragment);
-                    default -> {
-                        var data = intent.getData();
-                        if (data != null && Objects.equals(data.getScheme(), "module")) {
+
+                    "settings" -> nav.setSelectedItemId(R.id.settings_fragment)
+                    else -> {
+                        val data = intent.getData()
+                        if (data != null && data.getScheme() == "module") {
                             navController.navigate(
-                                    new Uri.Builder().scheme("lsposed").authority("module").appendQueryParameter("modulePackageName", data.getHost()).appendQueryParameter("moduleUserId", String.valueOf(data.getPort())).build(),
-                                    new NavOptions.Builder().setEnterAnim(R.anim.fragment_enter).setExitAnim(R.anim.fragment_exit).setPopEnterAnim(R.anim.fragment_enter_pop).setPopExitAnim(R.anim.fragment_exit_pop).setLaunchSingleTop(true).setPopUpTo(navController.getGraph().getStartDestinationId(), false, true).build());
+                                Uri.Builder().scheme("lsposed").authority("module")
+                                    .appendQueryParameter("modulePackageName", data.getHost())
+                                    .appendQueryParameter("moduleUserId", data.getPort().toString())
+                                    .build(),
+                                NavOptions.Builder().setEnterAnim(R.anim.fragment_enter)
+                                    .setExitAnim(R.anim.fragment_exit)
+                                    .setPopEnterAnim(R.anim.fragment_enter_pop)
+                                    .setPopExitAnim(R.anim.fragment_exit_pop)
+                                    .setLaunchSingleTop(true)
+                                    .setPopUpTo(navController.graph.startDestinationId, false, true)
+                                    .build()
+                            )
                         }
                     }
                 }
@@ -144,149 +133,169 @@ public class MainActivity extends BaseActivity implements RepoLoader.RepoListene
         }
     }
 
-    @Override
-    public boolean onSupportNavigateUp() {
-        NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment);
-        return navController.navigateUp() || super.onSupportNavigateUp();
+    override fun onSupportNavigateUp(): Boolean {
+        val navController = findNavController(this, R.id.nav_host_fragment)
+        return navController.navigateUp() || super.onSupportNavigateUp()
     }
 
-    public void restart() {
+    fun restart() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S || App.isParasitic) {
-            recreate();
+            recreate()
         } else {
             try {
-                Bundle savedInstanceState = new Bundle();
-                onSaveInstanceState(savedInstanceState);
-                finish();
-                startActivity(newIntent(savedInstanceState, this));
-                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-                restarting = true;
-            } catch (Throwable e) {
-                recreate();
+                val savedInstanceState = Bundle()
+                onSaveInstanceState(savedInstanceState)
+                finish()
+                startActivity(newIntent(savedInstanceState, this))
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                restarting = true
+            } catch (e: Throwable) {
+                recreate()
             }
         }
     }
 
-    @Override
-    public boolean dispatchKeyEvent(@NonNull KeyEvent event) {
-        return restarting || super.dispatchKeyEvent(event);
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        return restarting || super.dispatchKeyEvent(event)
     }
 
     @SuppressLint("RestrictedApi")
-    @Override
-    public boolean dispatchKeyShortcutEvent(@NonNull KeyEvent event) {
-        return restarting || super.dispatchKeyShortcutEvent(event);
+    override fun dispatchKeyShortcutEvent(event: KeyEvent): Boolean {
+        return restarting || super.dispatchKeyShortcutEvent(event)
     }
 
-    @Override
-    public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
-        return restarting || super.dispatchTouchEvent(event);
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        return restarting || super.dispatchTouchEvent(event)
     }
 
-    @Override
-    public boolean dispatchTrackballEvent(@NonNull MotionEvent event) {
-        return restarting || super.dispatchTrackballEvent(event);
+    override fun dispatchTrackballEvent(event: MotionEvent): Boolean {
+        return restarting || super.dispatchTrackballEvent(event)
     }
 
-    @Override
-    public boolean dispatchGenericMotionEvent(@NonNull MotionEvent event) {
-        return restarting || super.dispatchGenericMotionEvent(event);
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        return restarting || super.dispatchGenericMotionEvent(event)
     }
 
 
-    @Override
-    public void onRepoLoaded() {
-        final int[] count = new int[]{0};
-        HashSet<String> processedModules = new HashSet<>();
-        var modules = moduleUtil.getModules();
-        if (modules == null) return;
-        modules.forEach((k, v) -> {
-                    if (!processedModules.contains(k.first)) {
-                        var ver = repoLoader.getModuleLatestVersion(k.first);
-                        if (ver != null && ver.upgradable(v.versionCode, v.versionName)) {
-                            ++count[0];
-                        }
-                        processedModules.add(k.first);
-                    }
+    override fun onRepoLoaded() {
+        val count = intArrayOf(0)
+        val processedModules = HashSet<String?>()
+        val modules: MutableMap<Pair<String?, Int?>?, InstalledModule?>? = moduleUtil?.modules as MutableMap<Pair<String?, Int?>?, InstalledModule?>?
+        if (modules == null) return
+        modules.forEach { (k: Pair<String?, Int?>?, v: InstalledModule?) ->
+            if (!processedModules.contains(
+                    k!!.first
+                )
+            ) {
+                val ver: RepoLoader.ModuleVersion? = repoLoader?.getModuleLatestVersion(k.first)
+                if (ver != null && ver.upgradable(v!!.versionCode, v.versionName.toString())) {
+                    ++count[0]
                 }
-        );
-        runOnUiThread(() -> {
+                processedModules.add(k.first)
+            }
+        }
+        runOnUiThread(Runnable {
             if (count[0] > 0 && binding != null) {
-                var nav = (NavigationBarView) binding.nav;
-                var badge = nav.getOrCreateBadge(R.id.repo_nav);
-                badge.setVisible(true);
-                badge.setNumber(count[0]);
+                val nav = binding!!.nav as NavigationBarView
+                val badge = nav.getOrCreateBadge(R.id.repo_nav)
+                badge.setVisible(true)
+                badge.setNumber(count[0])
             } else {
-                onThrowable(null);
+                onThrowable(null)
             }
-        });
+        })
     }
 
-    @Override
-    public void onThrowable(Throwable t) {
-        runOnUiThread(() -> {
+    override fun onThrowable(t: Throwable?) {
+        runOnUiThread(Runnable {
             if (binding != null) {
-                var nav = (NavigationBarView) binding.nav;
-                var badge = nav.getOrCreateBadge(R.id.repo_nav);
-                badge.setVisible(false);
+                val nav = binding!!.nav as NavigationBarView
+                val badge = nav.getOrCreateBadge(R.id.repo_nav)
+                badge.setVisible(false)
             }
-        });
+        })
     }
 
-    @Override
-    public void onModulesReloaded() {
-        onRepoLoaded();
-        setModulesSummary(moduleUtil.getEnabledModulesCount());
+    override fun onModulesReloaded() {
+        onRepoLoaded()
+        setModulesSummary(moduleUtil?.enabledModulesCount)
     }
 
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (ConfigManager.isBinderAlive()) {
-            setModulesSummary(moduleUtil.getEnabledModulesCount());
-        } else setModulesSummary(0);
+    public override fun onResume() {
+        super.onResume()
+        if (ConfigManager.isBinderAlive) {
+            setModulesSummary(moduleUtil?.enabledModulesCount)
+        } else setModulesSummary(0)
         if (binding != null) {
-            var nav = (NavigationBarView) binding.nav;
+            val nav = binding!!.nav as NavigationBarView
             if (UpdateUtil.needUpdate()) {
-                var badge = nav.getOrCreateBadge(R.id.main_fragment);
-                badge.setVisible(true);
+                val badge = nav.getOrCreateBadge(R.id.main_fragment)
+                badge.setVisible(true)
             }
 
-            if (!ConfigManager.isBinderAlive()) {
-                nav.getMenu().removeItem(R.id.logs_fragment);
-                nav.getMenu().removeItem(R.id.modules_nav);
-                if (!ConfigManager.isMagiskInstalled()) {
-                    nav.getMenu().removeItem(R.id.repo_nav);
+            if (!ConfigManager.isBinderAlive) {
+                nav.getMenu().removeItem(R.id.logs_fragment)
+                nav.getMenu().removeItem(R.id.modules_nav)
+                if (!ConfigManager.isMagiskInstalled) {
+                    nav.getMenu().removeItem(R.id.repo_nav)
                 }
             }
         }
         if (App.isParasitic) {
-            var updateShortcut = ShortcutUtil.updateShortcut();
-            Log.d(App.TAG, "update shortcut success = " + updateShortcut);
+            val updateShortcut = ShortcutUtil.updateShortcut()
+            Log.d(App.TAG, "update shortcut success = " + updateShortcut)
         }
     }
 
-    private void setModulesSummary(int moduleCount) {
-        runOnUiThread(() -> {
+    private fun setModulesSummary(moduleCount: Int?) {
+        runOnUiThread(Runnable {
             if (binding != null) {
-                var nav = (NavigationBarView) binding.nav;
-                var badge = nav.getOrCreateBadge(R.id.modules_nav);
-                badge.setBackgroundColor(ResourceUtils.resolveColor(getTheme(), com.google.android.material.R.attr.colorPrimary));
-                badge.setBadgeTextColor(ResourceUtils.resolveColor(getTheme(), com.google.android.material.R.attr.colorOnPrimary));
-                if (moduleCount > 0) {
-                    badge.setVisible(true);
-                    badge.setNumber(moduleCount);
-                } else {
-                    badge.setVisible(false);
+                val nav = binding!!.nav as NavigationBarView
+                val badge = nav.getOrCreateBadge(R.id.modules_nav)
+                badge.setBackgroundColor(
+                    ResourceUtils.resolveColor(
+                        getTheme(),
+                        com.google.android.material.R.attr.colorPrimary
+                    )
+                )
+                badge.setBadgeTextColor(
+                    ResourceUtils.resolveColor(
+                        getTheme(),
+                        com.google.android.material.R.attr.colorOnPrimary
+                    )
+                )
+                if (moduleCount != null) {
+                    if (moduleCount > 0) {
+                        badge.setVisible(true)
+                        badge.setNumber(moduleCount)
+                    } else {
+                        badge.setVisible(false)
+                    }
                 }
             }
-        });
+        })
     }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        repoLoader.removeListener(this);
-        moduleUtil.removeListener(this);
+    override fun onDestroy() {
+        super.onDestroy()
+        repoLoader?.removeListener(this)
+        moduleUtil?.removeListener(this)
+    }
+
+    companion object {
+        private val KEY_PREFIX = MainActivity::class.java.getName() + '.'
+        private val EXTRA_SAVED_INSTANCE_STATE: String = KEY_PREFIX + "SAVED_INSTANCE_STATE"
+
+        private val repoLoader: RepoLoader? = RepoLoader.instance
+        private val moduleUtil: ModuleUtil? = ModuleUtil.instance
+
+        fun newIntent(context: Context): Intent {
+            return Intent(context, MainActivity::class.java)
+        }
+
+        private fun newIntent(savedInstanceState: Bundle, context: Context): Intent {
+            return newIntent(context)
+                .putExtra(EXTRA_SAVED_INSTANCE_STATE, savedInstanceState)
+        }
     }
 }

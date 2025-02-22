@@ -17,77 +17,78 @@
  * Copyright (C) 2020 EdXposed Contributors
  * Copyright (C) 2021 LSPosed Contributors
  */
+package org.lsposed.manager.ui.activity.base
 
-package org.lsposed.manager.ui.activity.base;
+import android.app.ActivityManager
+import android.app.ActivityManager.TaskDescription
+import android.content.res.Resources
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.drawable.AdaptiveIconDrawable
+import android.graphics.drawable.BitmapDrawable
+import android.os.Bundle
+import org.lsposed.manager.App
+import org.lsposed.manager.R
+import org.lsposed.manager.util.ThemeUtil
+import rikka.material.app.MaterialActivity
+import androidx.core.graphics.createBitmap
 
-import android.app.ActivityManager;
-import android.content.res.Resources;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.drawable.AdaptiveIconDrawable;
-import android.graphics.drawable.BitmapDrawable;
-import android.os.Bundle;
-import android.view.Window;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
-import org.lsposed.manager.App;
-import org.lsposed.manager.R;
-import org.lsposed.manager.util.ThemeUtil;
-
-import rikka.material.app.MaterialActivity;
-
-public class BaseActivity extends MaterialActivity {
-    private static Bitmap icon = null;
-
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        setTheme(R.style.AppTheme);
-        super.onCreate(savedInstanceState);
+open class BaseActivity : MaterialActivity() {
+    public override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(R.style.AppTheme)
+        super.onCreate(savedInstanceState)
     }
 
-    @Override
-    protected void onStart() {
-        super.onStart();
-        if (!App.isParasitic) return;
-        for (var task : getSystemService(ActivityManager.class).getAppTasks()) {
-            task.setExcludeFromRecents(false);
+    override fun onStart() {
+        super.onStart()
+        if (!App.isParasitic) return
+        for (task in getSystemService<ActivityManager?>(ActivityManager::class.java).getAppTasks()) {
+            task.setExcludeFromRecents(false)
         }
         if (icon == null) {
-            var drawable = getApplicationInfo().loadIcon(getPackageManager());
-            if (drawable instanceof BitmapDrawable) {
-                icon = ((BitmapDrawable) drawable).getBitmap();
-            } else if (drawable instanceof AdaptiveIconDrawable) {
-                icon = Bitmap.createBitmap(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
-                final Canvas canvas = new Canvas(icon);
-                drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
-                drawable.draw(canvas);
+            val drawable = getApplicationInfo().loadIcon(getPackageManager())
+            if (drawable is BitmapDrawable) {
+                icon = drawable.getBitmap()
+            } else if (drawable is AdaptiveIconDrawable) {
+                icon = createBitmap(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight())
+                val canvas = Canvas(icon!!)
+                drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight())
+                drawable.draw(canvas)
             }
         }
-        setTaskDescription(new ActivityManager.TaskDescription(getTitle().toString(), icon, getColor(R.color.ic_launcher_background)));
+        setTaskDescription(
+            TaskDescription(
+                getTitle().toString(),
+                icon,
+                getColor(R.color.ic_launcher_background)
+            )
+        )
     }
 
-    @Override
-    public void onApplyUserThemeResource(@NonNull Resources.Theme theme, boolean isDecorView) {
-        if (!ThemeUtil.isSystemAccent()) {
-            theme.applyStyle(ThemeUtil.getColorThemeStyleRes(), true);
+    override fun onApplyUserThemeResource(theme: Resources.Theme, isDecorView: Boolean) {
+        if (!ThemeUtil.isSystemAccent) {
+            theme.applyStyle(ThemeUtil.colorThemeStyleRes, true)
         }
-        theme.applyStyle(ThemeUtil.getNightThemeStyleRes(this), true);
-        theme.applyStyle(rikka.material.preference.R.style.ThemeOverlay_Rikka_Material3_Preference, true);
+        theme.applyStyle(ThemeUtil.getNightThemeStyleRes(this), true)
+        theme.applyStyle(
+            rikka.material.preference.R.style.ThemeOverlay_Rikka_Material3_Preference,
+            true
+        )
     }
 
-    @Override
-    public String computeUserThemeKey() {
-        return ThemeUtil.getColorTheme() + ThemeUtil.getNightTheme(this);
+    public override fun computeUserThemeKey(): String? {
+        return ThemeUtil.colorTheme + ThemeUtil.getNightTheme(this)
     }
 
-    @Override
-    public void onApplyTranslucentSystemBars() {
-        super.onApplyTranslucentSystemBars();
-        Window window = getWindow();
-        window.setStatusBarColor(Color.TRANSPARENT);
-        window.setNavigationBarColor(Color.TRANSPARENT);
+    public override fun onApplyTranslucentSystemBars() {
+        super.onApplyTranslucentSystemBars()
+        val window = getWindow()
+        window.setStatusBarColor(Color.TRANSPARENT)
+        window.setNavigationBarColor(Color.TRANSPARENT)
+    }
+
+    companion object {
+        private var icon: Bitmap? = null
     }
 }

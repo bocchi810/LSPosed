@@ -17,137 +17,49 @@
  * Copyright (C) 2020 EdXposed Contributors
  * Copyright (C) 2021 LSPosed Contributors
  */
+package org.lsposed.manager.repo.model
 
-package org.lsposed.manager.repo.model;
+import com.google.gson.annotations.Expose
+import com.google.gson.annotations.SerializedName
 
-import androidx.annotation.Nullable;
-
-import com.google.gson.annotations.Expose;
-import com.google.gson.annotations.SerializedName;
-
-import java.util.ArrayList;
-import java.util.List;
-
-public class Release {
-
+class Release {
     @SerializedName("name")
     @Expose
-    private String name;
+    var name: String? = null
+
     @SerializedName("url")
     @Expose
-    private String url;
+    var url: String? = null
+
     @SerializedName("description")
     @Expose
-    private String description;
+    var description: String? = null
+
     @SerializedName("descriptionHTML")
     @Expose
-    private String descriptionHTML;
+    var descriptionHTML: String? = null
+
     @SerializedName("createdAt")
     @Expose
-    private String createdAt;
+    var createdAt: String? = null
+
     @SerializedName("publishedAt")
     @Expose
-    private String publishedAt;
+    var publishedAt: String? = null
+
     @SerializedName("updatedAt")
     @Expose
-    private String updatedAt;
+    var updatedAt: String? = null
+
     @SerializedName("tagName")
     @Expose
-    private String tagName;
+    var tagName: String? = null
+
     @SerializedName("isPrerelease")
     @Expose
-    private Boolean isPrerelease;
+    var isPrerelease: Boolean? = null
+
     @SerializedName("releaseAssets")
     @Expose
-    private List<ReleaseAsset> releaseAssets = new ArrayList<>();
-
-    @Nullable
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    @Nullable
-    public String getUrl() {
-        return url;
-    }
-
-    public void setUrl(String url) {
-        this.url = url;
-    }
-
-    @Nullable
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    @Nullable
-    public String getDescriptionHTML() {
-        return descriptionHTML;
-    }
-
-    public void setDescriptionHTML(String descriptionHTML) {
-        this.descriptionHTML = descriptionHTML;
-    }
-
-    @Nullable
-    public String getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(String createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    @Nullable
-    public String getPublishedAt() {
-        return publishedAt;
-    }
-
-    public void setPublishedAt(String publishedAt) {
-        this.publishedAt = publishedAt;
-    }
-
-    @Nullable
-    public String getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(String updatedAt) {
-        this.updatedAt = updatedAt;
-    }
-
-    @Nullable
-    public String getTagName() {
-        return tagName;
-    }
-
-    public void setTagName(String tagName) {
-        this.tagName = tagName;
-    }
-
-    @Nullable
-    public Boolean getIsPrerelease() {
-        return isPrerelease;
-    }
-
-    public void setIsPrerelease(Boolean isPrerelease) {
-        this.isPrerelease = isPrerelease;
-    }
-
-    @Nullable
-    public List<ReleaseAsset> getReleaseAssets() {
-        return releaseAssets;
-    }
-
-    public void setReleaseAssets(List<ReleaseAsset> releaseAssets) {
-        this.releaseAssets = releaseAssets;
-    }
+    var releaseAssets: MutableList<ReleaseAsset?>? = ArrayList<ReleaseAsset?>()
 }

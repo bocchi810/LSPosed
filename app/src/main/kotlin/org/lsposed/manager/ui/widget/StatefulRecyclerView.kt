@@ -16,56 +16,47 @@
  *
  * Copyright (C) 2022 LSPosed Contributors
  */
+package org.lsposed.manager.ui.widget
 
-package org.lsposed.manager.ui.widget;
+import android.content.Context
+import android.os.Bundle
+import android.os.Parcelable
+import android.util.AttributeSet
+import androidx.viewpager2.adapter.StatefulAdapter
+import rikka.widget.borderview.BorderRecyclerView
 
-import android.content.Context;
-import android.os.Bundle;
-import android.os.Parcelable;
-import android.util.AttributeSet;
+open class StatefulRecyclerView : BorderRecyclerView {
+    constructor(context: Context) : super(context)
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.viewpager2.adapter.StatefulAdapter;
+    constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
 
-import rikka.widget.borderview.BorderRecyclerView;
-
-public class StatefulRecyclerView extends BorderRecyclerView {
-    public StatefulRecyclerView(@NonNull Context context) {
-        super(context);
-    }
-
-    public StatefulRecyclerView(@NonNull Context context, @Nullable AttributeSet attrs) {
-        super(context, attrs);
-    }
-
-    public StatefulRecyclerView(@NonNull Context context, @Nullable AttributeSet attrs, int defStyle) {
-        super(context, attrs, defStyle);
-    }
+    constructor(context: Context, attrs: AttributeSet?, defStyle: Int) : super(
+        context,
+        attrs,
+        defStyle
+    )
 
 
-    @Override
-    public Parcelable onSaveInstanceState() {
-        Bundle bundle = new Bundle();
-        bundle.putParcelable("superState", super.onSaveInstanceState());
-        var adapter = getAdapter();
-        if (adapter instanceof StatefulAdapter) {
-            bundle.putParcelable("adaptor", ((StatefulAdapter) adapter).saveState());
+    public override fun onSaveInstanceState(): Parcelable {
+        val bundle = Bundle()
+        bundle.putParcelable("superState", super.onSaveInstanceState())
+        val adapter = getAdapter()
+        if (adapter is StatefulAdapter) {
+            bundle.putParcelable("adaptor", (adapter as StatefulAdapter).saveState())
         }
-        return bundle;
+        return bundle
     }
 
-    @Override
-    public void onRestoreInstanceState(Parcelable state) {
-        if (state instanceof Bundle) {
-            Bundle bundle = (Bundle) state;
-            super.onRestoreInstanceState(bundle.getParcelable("superState"));
-            var adapter = getAdapter();
-            if (adapter instanceof StatefulAdapter) {
-                ((StatefulAdapter) adapter).restoreState(bundle.getParcelable("adaptor"));
+    public override fun onRestoreInstanceState(state: Parcelable?) {
+        if (state is Bundle) {
+            val bundle = state
+            super.onRestoreInstanceState(bundle.getParcelable<Parcelable?>("superState"))
+            val adapter = getAdapter()
+            if (adapter is StatefulAdapter) {
+                (adapter as StatefulAdapter).restoreState(bundle.getParcelable<Parcelable?>("adaptor")!!)
             }
         } else {
-            super.onRestoreInstanceState(state);
+            super.onRestoreInstanceState(state)
         }
     }
 }

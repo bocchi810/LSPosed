@@ -16,787 +16,876 @@
  *
  * Copyright (C) 2021 LSPosed Contributors-->
  */
+package org.lsposed.manager.ui.fragment
 
-package org.lsposed.manager.ui.fragment;
+import android.annotation.SuppressLint
+import android.content.DialogInterface
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Typeface
+import android.graphics.drawable.Drawable
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import android.text.Spannable
+import android.text.SpannableStringBuilder
+import android.text.TextUtils
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
+import android.util.SparseArray
+import android.view.ContextMenu
+import android.view.ContextMenu.ContextMenuInfo
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
+import android.view.View
+import android.view.View.OnAttachStateChangeListener
+import android.view.View.OnCreateContextMenuListener
+import android.view.View.OnLayoutChangeListener
+import android.view.View.OnLongClickListener
+import android.view.ViewGroup
+import android.widget.Filter
+import android.widget.Filterable
+import android.widget.ImageView
+import android.widget.TextView
+import androidx.appcompat.widget.SearchView
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.coordinatorlayout.widget.CoordinatorLayout
+import androidx.core.util.Pair
+import androidx.core.view.MenuProvider
+import androidx.fragment.app.Fragment
+import androidx.navigation.NavOptions
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.RecyclerView.AdapterDataObserver
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout.OnRefreshListener
+import androidx.viewpager2.adapter.FragmentStateAdapter
+import androidx.viewpager2.widget.ViewPager2
+import com.bumptech.glide.request.target.CustomTarget
+import com.bumptech.glide.request.transition.Transition
+import com.google.android.material.behavior.HideBottomViewOnScrollBehavior
+import com.google.android.material.checkbox.MaterialCheckBox
+import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.tabs.TabLayout
+import com.google.android.material.tabs.TabLayoutMediator
+import com.google.android.material.tabs.TabLayoutMediator.TabConfigurationStrategy
+import org.lsposed.lspd.models.UserInfo
+import org.lsposed.manager.App
+import org.lsposed.manager.ConfigManager
+import org.lsposed.manager.R
+import org.lsposed.manager.ui.adapters.AppHelper
+import org.lsposed.manager.databinding.FragmentPagerBinding
+import org.lsposed.manager.databinding.ItemModuleBinding
+import org.lsposed.manager.databinding.SwiperefreshRecyclerviewBinding
+import org.lsposed.manager.repo.RepoLoader
+import org.lsposed.manager.repo.RepoLoader.RepoListener
+import org.lsposed.manager.ui.dialog.BlurBehindDialogBuilder
+import org.lsposed.manager.ui.fragment.CompileDialogFragment.Companion.speed
+import org.lsposed.manager.ui.widget.EmptyStateRecyclerView.EmptyStateAdapter
+import org.lsposed.manager.util.ModuleUtil
+import org.lsposed.manager.util.ModuleUtil.InstalledModule
+import org.lsposed.manager.util.ModuleUtil.ModuleListener
+import rikka.core.util.ResourceUtils
+import rikka.material.app.LocaleDelegate
+import rikka.recyclerview.fixEdgeEffect
+import rikka.widget.borderview.BorderView.OnBorderVisibilityChangedListener
+import java.lang.String.format
+import java.util.Locale
+import java.util.function.Consumer
+import java.util.function.IntUnaryOperator
+import java.util.stream.IntStream
+import androidx.core.util.size
+import com.bumptech.glide.Glide
 
-import static android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS;
+class ModulesFragment : BaseFragment(), ModuleListener, RepoListener, MenuProvider {
+    protected var binding: FragmentPagerBinding? = null
+    protected var searchView: SearchView? = null
+    private var searchListener: SearchView.OnQueryTextListener? = null
 
-import android.annotation.SuppressLint;
-import android.content.Intent;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
-import android.graphics.Typeface;
-import android.graphics.drawable.Drawable;
-import android.net.Uri;
-import android.os.Build;
-import android.os.Bundle;
-import android.text.Spannable;
-import android.text.SpannableStringBuilder;
-import android.text.TextUtils;
-import android.text.style.ForegroundColorSpan;
-import android.text.style.StyleSpan;
-import android.text.style.TypefaceSpan;
-import android.util.SparseArray;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.Filter;
-import android.widget.Filterable;
-import android.widget.ImageView;
-import android.widget.TextView;
+    var adapters: SparseArray<ModuleAdapter> = SparseArray<ModuleAdapter>()
+    var pagerAdapter: PagerAdapter? = null
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.widget.SearchView;
-import androidx.constraintlayout.widget.ConstraintLayout;
-import androidx.coordinatorlayout.widget.CoordinatorLayout;
-import androidx.core.view.MenuProvider;
-import androidx.fragment.app.Fragment;
-import androidx.navigation.NavOptions;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-import androidx.viewpager2.adapter.FragmentStateAdapter;
-import androidx.viewpager2.widget.ViewPager2;
+    private var selectedModule: InstalledModule? = null
 
-import com.bumptech.glide.request.target.CustomTarget;
-import com.bumptech.glide.request.transition.Transition;
-import com.google.android.material.behavior.HideBottomViewOnScrollBehavior;
-import com.google.android.material.checkbox.MaterialCheckBox;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.google.android.material.tabs.TabLayout;
-import com.google.android.material.tabs.TabLayoutMediator;
-
-import org.lsposed.lspd.models.UserInfo;
-import org.lsposed.manager.App;
-import org.lsposed.manager.ConfigManager;
-import org.lsposed.manager.R;
-import org.lsposed.manager.adapters.AppHelper;
-import org.lsposed.manager.databinding.FragmentPagerBinding;
-import org.lsposed.manager.databinding.ItemModuleBinding;
-import org.lsposed.manager.databinding.SwiperefreshRecyclerviewBinding;
-import org.lsposed.manager.repo.RepoLoader;
-import org.lsposed.manager.ui.dialog.BlurBehindDialogBuilder;
-import org.lsposed.manager.ui.widget.EmptyStateRecyclerView;
-import org.lsposed.manager.util.GlideApp;
-import org.lsposed.manager.util.ModuleUtil;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.function.Consumer;
-import java.util.stream.IntStream;
-
-import rikka.core.util.ResourceUtils;
-import rikka.material.app.LocaleDelegate;
-import rikka.recyclerview.RecyclerViewKt;
-
-public class ModulesFragment extends BaseFragment implements ModuleUtil.ModuleListener, RepoLoader.RepoListener, MenuProvider {
-    private static final PackageManager pm = App.getInstance().getPackageManager();
-    private static final ModuleUtil moduleUtil = ModuleUtil.getInstance();
-    private static final RepoLoader repoLoader = RepoLoader.getInstance();
-    protected FragmentPagerBinding binding;
-    protected SearchView searchView;
-    private SearchView.OnQueryTextListener searchListener;
-
-    SparseArray<ModuleAdapter> adapters = new SparseArray<>();
-    PagerAdapter pagerAdapter = null;
-
-    private ModuleUtil.InstalledModule selectedModule;
-
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        searchListener = new SearchView.OnQueryTextListener() {
-            @Override
-            public boolean onQueryTextSubmit(String query) {
-                forEachAdaptor(adapter -> adapter.getFilter().filter(query));
-                return false;
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        searchListener = object : SearchView.OnQueryTextListener {
+            override fun onQueryTextSubmit(query: String?): Boolean {
+                forEachAdaptor(Consumer { adapter: ModuleAdapter? ->
+                    adapter!!.getFilter()?.filter(query)
+                })
+                return false
             }
 
-            @Override
-            public boolean onQueryTextChange(String query) {
-                forEachAdaptor(adapter -> adapter.getFilter().filter(query));
-                return false;
-            }
-        };
-    }
-
-    private void forEachAdaptor(Consumer<? super ModuleAdapter> action) {
-        var snapshot = adapters;
-        for (var i = 0; i < snapshot.size(); ++i) {
-            action.accept(snapshot.valueAt(i));
-        }
-    }
-
-    private void showFab() {
-        var layoutParams = binding.fab.getLayoutParams();
-        if (layoutParams instanceof CoordinatorLayout.LayoutParams) {
-            var coordinatorLayoutBehavior =
-                    ((CoordinatorLayout.LayoutParams) layoutParams).getBehavior();
-            if (coordinatorLayoutBehavior instanceof HideBottomViewOnScrollBehavior) {
-                //noinspection unchecked
-                ((HideBottomViewOnScrollBehavior<FloatingActionButton>) coordinatorLayoutBehavior).slideUp(binding.fab);
+            override fun onQueryTextChange(query: String?): Boolean {
+                forEachAdaptor(Consumer { adapter: ModuleAdapter? ->
+                    adapter!!.getFilter()?.filter(query)
+                })
+                return false
             }
         }
     }
 
-    @Nullable
-    @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        binding = FragmentPagerBinding.inflate(inflater, container, false);
-        binding.appBar.setLiftable(true);
-        setupToolbar(binding.toolbar, binding.clickView, R.string.Modules, R.menu.menu_modules);
-        binding.toolbar.setNavigationIcon(null);
-        pagerAdapter = new PagerAdapter(this);
-        binding.viewPager.setAdapter(pagerAdapter);
-        binding.viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
-            @Override
-            public void onPageSelected(int position) {
-                showFab();
-            }
-        });
-
-        new TabLayoutMediator(binding.tabLayout, binding.viewPager, (tab, position) -> {
-            if (position < adapters.size()) {
-                tab.setText(adapters.valueAt(position).getUser().name);
-            }
-        }).attach();
-
-        binding.tabLayout.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
-            ViewGroup vg = (ViewGroup) binding.tabLayout.getChildAt(0);
-            int tabLayoutWidth = IntStream.range(0, binding.tabLayout.getTabCount()).map(i -> vg.getChildAt(i).getWidth()).sum();
-            if (tabLayoutWidth <= binding.getRoot().getWidth()) {
-                binding.tabLayout.setTabMode(TabLayout.MODE_FIXED);
-                binding.tabLayout.setTabGravity(TabLayout.GRAVITY_FILL);
-            }
-        });
-
-        binding.fab.setOnClickListener(v -> {
-            var bundle = new Bundle();
-            var user = adapters.valueAt(binding.viewPager.getCurrentItem()).getUser();
-            bundle.putParcelable("userInfo", user);
-            var f = new RecyclerViewDialogFragment();
-            f.setArguments(bundle);
-            f.show(getChildFragmentManager(), "install_to_user" + user.id);
-        });
-
-        moduleUtil.addListener(this);
-        repoLoader.addListener(this);
-        onModulesReloaded();
-
-        return binding.getRoot();
+    private fun forEachAdaptor(action: Consumer<in ModuleAdapter?>) {
+        val snapshot = adapters
+        for (i in 0..<snapshot.size) {
+            action.accept(snapshot.valueAt(i))
+        }
     }
 
-    @Override
-    public void onPrepareMenu(Menu menu) {
-        searchView = (SearchView) menu.findItem(R.id.menu_search).getActionView();
+    private fun showFab() {
+        val layoutParams = binding!!.fab.getLayoutParams()
+        if (layoutParams is CoordinatorLayout.LayoutParams) {
+            val coordinatorLayoutBehavior =
+                layoutParams.getBehavior()
+            if (coordinatorLayoutBehavior is HideBottomViewOnScrollBehavior<*>) {
+                (coordinatorLayoutBehavior as HideBottomViewOnScrollBehavior<FloatingActionButton?>).slideUp(
+                    binding!!.fab
+                )
+            }
+        }
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        binding = FragmentPagerBinding.inflate(inflater, container, false)
+        binding!!.appBar.setLiftable(true)
+        setupToolbar(binding!!.toolbar, binding!!.clickView, R.string.Modules, R.menu.menu_modules)
+        binding!!.toolbar.setNavigationIcon(null)
+
+        // Pass 'this' (the outer class instance) to the PagerAdapter constructor
+        pagerAdapter = PagerAdapter(this)
+
+        binding!!.viewPager.setAdapter(pagerAdapter)
+        binding!!.viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                showFab()
+            }
+        })
+
+        TabLayoutMediator(
+            binding!!.tabLayout,
+            binding!!.viewPager,
+            TabConfigurationStrategy { tab: TabLayout.Tab?, position: Int ->
+                if (position < adapters.size) {
+                    tab!!.setText(adapters.valueAt(position).user.name)
+                }
+            }).attach()
+
+        binding!!.tabLayout.addOnLayoutChangeListener(OnLayoutChangeListener { view: View?, left: Int, top: Int, right: Int, bottom: Int, oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int ->
+            val vg = binding!!.tabLayout.getChildAt(0) as ViewGroup
+            val tabLayoutWidth = IntStream.range(0, binding!!.tabLayout.getTabCount()).map(
+                IntUnaryOperator { i: Int -> vg.getChildAt(i).getWidth() }).sum()
+            if (tabLayoutWidth <= binding!!.getRoot().getWidth()) {
+                binding!!.tabLayout.setTabMode(TabLayout.MODE_FIXED)
+                binding!!.tabLayout.setTabGravity(TabLayout.GRAVITY_FILL)
+            }
+        })
+
+        binding!!.fab.setOnClickListener(View.OnClickListener { v: View? ->
+            val bundle = Bundle()
+            val user = adapters.valueAt(binding!!.viewPager.getCurrentItem()).user
+            bundle.putParcelable("userInfo", user)
+            val f = RecyclerViewDialogFragment()
+            f.setArguments(bundle)
+            f.show(getChildFragmentManager(), "install_to_user" + user.id)
+        })
+
+        moduleUtil?.addListener(this)
+        repoLoader?.addListener(this)
+        onModulesReloaded()
+
+        return binding!!.getRoot()
+    }
+
+    override fun onPrepareMenu(menu: Menu) {
+        searchView = menu.findItem(R.id.menu_search).getActionView() as SearchView?
         if (searchView != null) {
-            searchView.setOnQueryTextListener(searchListener);
-            searchView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-                @Override
-                public void onViewAttachedToWindow(@NonNull View arg0) {
-                    binding.appBar.setExpanded(false, true);
+            searchView!!.setOnQueryTextListener(searchListener)
+            searchView!!.addOnAttachStateChangeListener(object : OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(arg0: View) {
+                    binding!!.appBar.setExpanded(false, true)
                 }
 
-                @Override
-                public void onViewDetachedFromWindow(@NonNull View v) {
+                override fun onViewDetachedFromWindow(v: View) {
                 }
-            });
-            searchView.findViewById(androidx.appcompat.R.id.search_edit_frame).setLayoutDirection(View.LAYOUT_DIRECTION_INHERIT);
+            })
+            searchView!!.findViewById<View?>(androidx.appcompat.R.id.search_edit_frame)
+                .setLayoutDirection(
+                    View.LAYOUT_DIRECTION_INHERIT
+                )
         }
     }
 
-    @Override
-    public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
-
+    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
     }
 
-    @Override
-    public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
-        return false;
+    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+        return false
     }
 
-    @Override
-    public void onResume() {
-        super.onResume();
-        forEachAdaptor(ModuleAdapter::refresh);
+    override fun onResume() {
+        super.onResume()
+        forEachAdaptor(Consumer { obj: ModuleAdapter? -> obj!!.refresh() })
     }
 
-    @Override
-    public void onSingleModuleReloaded(ModuleUtil.InstalledModule module) {
-        forEachAdaptor(ModuleAdapter::refresh);
+    override fun onSingleModuleReloaded(module: InstalledModule?) {
+        forEachAdaptor(Consumer { obj: ModuleAdapter? -> obj!!.refresh() })
     }
 
-    @Override
-    public void onModulesReloaded() {
-        var users = moduleUtil.getUsers();
-        if (users == null) return;
+    @SuppressLint("NotifyDataSetChanged")
+    override fun onModulesReloaded() {
+        val users: MutableList<UserInfo>? = moduleUtil?.getUsers() as MutableList<UserInfo>?
+        if (users == null) return
 
-        if (users.size() != 1) {
-            binding.viewPager.setUserInputEnabled(true);
-            binding.tabLayout.setVisibility(View.VISIBLE);
-            binding.fab.show();
+        if (users.size != 1) {
+            binding!!.viewPager.setUserInputEnabled(true)
+            binding!!.tabLayout.setVisibility(View.VISIBLE)
+            binding!!.fab.show()
         } else {
-            binding.viewPager.setUserInputEnabled(false);
-            binding.tabLayout.setVisibility(View.GONE);
+            binding!!.viewPager.setUserInputEnabled(false)
+            binding!!.tabLayout.setVisibility(View.GONE)
         }
 
-        var tmp = new SparseArray<ModuleAdapter>(users.size());
-        var snapshot = adapters;
-        for (var user : users) {
+        val tmp = SparseArray<ModuleAdapter>(users.size)
+        val snapshot = adapters
+        for (user in users) {
             if (snapshot.indexOfKey(user.id) >= 0) {
-                tmp.put(user.id, snapshot.get(user.id));
+                tmp.put(user.id, snapshot.get(user.id))
             } else {
-                var adapter = new ModuleAdapter(user);
-                adapter.setHasStableIds(true);
-                tmp.put(user.id, adapter);
+                val adapter = ModuleAdapter(user)
+                adapter.setHasStableIds(true)
+                tmp.put(user.id, adapter)
             }
         }
-        adapters = tmp;
-        forEachAdaptor(ModuleAdapter::refresh);
-        runOnUiThread(pagerAdapter::notifyDataSetChanged);
-        updateModuleSummary();
+        adapters = tmp
+        forEachAdaptor(Consumer { obj: ModuleAdapter? -> obj!!.refresh() })
+        runOnUiThread(Runnable { pagerAdapter!!.notifyDataSetChanged() })
+        updateModuleSummary()
     }
 
-    @Override
-    public void onRepoLoaded() {
-        forEachAdaptor(ModuleAdapter::refresh);
+    override fun onRepoLoaded() {
+        forEachAdaptor(Consumer { obj: ModuleAdapter? -> obj!!.refresh() })
     }
 
-    private void updateModuleSummary() {
-        var moduleCount = moduleUtil.getEnabledModulesCount();
-        runOnUiThread(() -> {
+    private fun updateModuleSummary() {
+        val moduleCount: Int? = moduleUtil?.enabledModulesCount
+        runOnUiThread(Runnable {
             if (binding != null) {
-                binding.toolbar.setSubtitle(moduleCount == -1 ? getString(R.string.loading) : getResources().getQuantityString(R.plurals.modules_enabled_count, moduleCount, moduleCount));
-                binding.toolbarLayout.setSubtitle(binding.toolbar.getSubtitle());
+                binding!!.toolbar.setSubtitle(
+                    if (moduleCount == -1) getString(R.string.loading) else moduleCount?.let {
+                        getResources().getQuantityString(
+                            R.plurals.modules_enabled_count,
+                            it,
+                            moduleCount
+                        )
+                    }
+                )
+                binding!!.toolbarLayout.setSubtitle(binding!!.toolbar.getSubtitle())
             }
-        });
+        })
     }
 
-    void installModuleToUser(ModuleUtil.InstalledModule module, UserInfo user) {
-        new BlurBehindDialogBuilder(requireActivity(), R.style.ThemeOverlay_MaterialAlertDialog_Centered_FullWidthButtons)
-                .setTitle(getString(R.string.install_to_user, user.name))
-                .setMessage(getString(R.string.install_to_user_message, module.getAppName(), user.name))
-                .setPositiveButton(android.R.string.ok, (dialog, which) ->
-                        runAsync(() -> {
-                            var success = ConfigManager.installExistingPackageAsUser(module.packageName, user.id);
-                            String text = success ?
-                                    getString(R.string.module_installed, module.getAppName(), user.name) :
-                                    getString(R.string.module_install_failed);
-                            showHint(text, false);
-                            if (success)
-                                moduleUtil.reloadSingleModule(module.packageName, user.id);
-                        }))
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
+    fun installModuleToUser(module: InstalledModule, user: UserInfo) {
+        BlurBehindDialogBuilder(
+            requireActivity(),
+            R.style.ThemeOverlay_MaterialAlertDialog_Centered_FullWidthButtons
+        )
+            .setTitle(getString(R.string.install_to_user, user.name))
+            .setMessage(getString(R.string.install_to_user_message, module.appName, user.name))
+            .setPositiveButton(
+                android.R.string.ok,
+                DialogInterface.OnClickListener { dialog: DialogInterface?, which: Int ->
+                    runAsync(
+                        Runnable {
+                            val success = ConfigManager.installExistingPackageAsUser(
+                                module.packageName,
+                                user.id
+                            )
+                            val text = if (success) getString(
+                                R.string.module_installed,
+                                module.appName,
+                                user.name
+                            ) else getString(R.string.module_install_failed)
+                            showHint(text, false)
+                            if (success) moduleUtil?.reloadSingleModule(module.packageName, user.id)
+                        })
+                })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     @SuppressLint("WrongConstant")
-    @Override
-    public boolean onContextItemSelected(@NonNull MenuItem item) {
+    override fun onContextItemSelected(item: MenuItem): Boolean {
         if (selectedModule == null) {
-            return false;
+            return false
         }
-        int itemId = item.getItemId();
+        val itemId = item.getItemId()
         if (itemId == R.id.menu_launch) {
-            String packageName = selectedModule.packageName;
+            val packageName = selectedModule!!.packageName
             if (packageName == null) {
-                return false;
+                return false
             }
-            Intent intent = AppHelper.getSettingsIntent(packageName, selectedModule.userId);
+            val intent = AppHelper.getSettingsIntent(packageName, selectedModule!!.userId)
             if (intent != null) {
-                ConfigManager.startActivityAsUserWithFeature(intent, selectedModule.userId);
+                ConfigManager.startActivityAsUserWithFeature(intent, selectedModule!!.userId)
             }
-            return true;
+            return true
         } else if (itemId == R.id.menu_other_app) {
-            var intent = new Intent(Intent.ACTION_SHOW_APP_INFO);
-            intent.putExtra(Intent.EXTRA_PACKAGE_NAME, selectedModule.packageName);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            ConfigManager.startActivityAsUserWithFeature(intent, selectedModule.userId);
-            return true;
+            val intent = Intent(Intent.ACTION_SHOW_APP_INFO)
+            intent.putExtra(Intent.EXTRA_PACKAGE_NAME, selectedModule!!.packageName)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ConfigManager.startActivityAsUserWithFeature(intent, selectedModule!!.userId)
+            return true
         } else if (itemId == R.id.menu_app_info) {
-            ConfigManager.startActivityAsUserWithFeature(new Intent(ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", selectedModule.packageName, null)), selectedModule.userId);
-            return true;
+            ConfigManager.startActivityAsUserWithFeature(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", selectedModule!!.packageName, null)
+                ), selectedModule!!.userId
+            )
+            return true
         } else if (itemId == R.id.menu_uninstall) {
-            new BlurBehindDialogBuilder(requireActivity(), R.style.ThemeOverlay_MaterialAlertDialog_FullWidthButtons)
-                    .setIcon(selectedModule.app.loadIcon(pm))
-                    .setTitle(selectedModule.getAppName())
-                    .setMessage(R.string.module_uninstall_message)
-                    .setPositiveButton(android.R.string.ok, (dialog, which) ->
-                            runAsync(() -> {
-                                boolean success = ConfigManager.uninstallPackage(selectedModule.packageName, selectedModule.userId);
-                                String text = success ? getString(R.string.module_uninstalled, selectedModule.getAppName()) : getString(R.string.module_uninstall_failed);
-                                showHint(text, false);
-                                if (success)
-                                    moduleUtil.reloadSingleModule(selectedModule.packageName, selectedModule.userId);
-                            }))
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show();
-            return true;
+            BlurBehindDialogBuilder(
+                requireActivity(),
+                R.style.ThemeOverlay_MaterialAlertDialog_FullWidthButtons
+            )
+                .setIcon(selectedModule!!.app?.loadIcon(pm))
+                .setTitle(selectedModule!!.appName)
+                .setMessage(R.string.module_uninstall_message)
+                .setPositiveButton(
+                    android.R.string.ok,
+                    DialogInterface.OnClickListener { dialog: DialogInterface?, which: Int ->
+                        runAsync(
+                            Runnable {
+                                val success = ConfigManager.uninstallPackage(
+                                    selectedModule!!.packageName,
+                                    selectedModule!!.userId
+                                )
+                                val text = if (success) getString(
+                                    R.string.module_uninstalled,
+                                    selectedModule!!.appName
+                                ) else getString(R.string.module_uninstall_failed)
+                                showHint(text, false)
+                                if (success) moduleUtil?.reloadSingleModule(
+                                    selectedModule!!.packageName,
+                                    selectedModule!!.userId
+                                )
+                            })
+                    })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            return true
         } else if (itemId == R.id.menu_repo) {
-            var navController = getNavController();
+            val navController = navController
             navController.navigate(
-                    new Uri.Builder().scheme("lsposed").authority("repo").appendQueryParameter("modulePackageName", selectedModule.packageName).build(),
-                    new NavOptions.Builder().setEnterAnim(R.anim.fragment_enter).setExitAnim(R.anim.fragment_exit).setPopEnterAnim(R.anim.fragment_enter_pop).setPopExitAnim(R.anim.fragment_exit_pop).setLaunchSingleTop(true).setPopUpTo(getNavController().getGraph().getStartDestinationId(), false, true).build());
-            return true;
+                Uri.Builder().scheme("lsposed").authority("repo")
+                    .appendQueryParameter("modulePackageName", selectedModule!!.packageName)
+                    .build(),
+                NavOptions.Builder().setEnterAnim(R.anim.fragment_enter)
+                    .setExitAnim(R.anim.fragment_exit).setPopEnterAnim(R.anim.fragment_enter_pop)
+                    .setPopExitAnim(R.anim.fragment_exit_pop).setLaunchSingleTop(true)
+                    .setPopUpTo(navController.graph.startDestinationId, false, true).build()
+            )
+            return true
         } else if (itemId == R.id.menu_compile_speed) {
-            CompileDialogFragment.speed(getChildFragmentManager(), selectedModule.pkg.applicationInfo);
+            speed(getChildFragmentManager(), selectedModule!!.packageInfo.applicationInfo)
         }
-        return super.onContextItemSelected(item);
+        return super.onContextItemSelected(item)
     }
 
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        moduleUtil.removeListener(this);
-        repoLoader.removeListener(this);
-        binding = null;
+    override fun onDestroyView() {
+        super.onDestroyView()
+        moduleUtil?.removeListener(this)
+        repoLoader?.removeListener(this)
+        binding = null
     }
 
-    public static class ModuleListFragment extends Fragment {
-        public SwiperefreshRecyclerviewBinding binding;
-        private ModuleAdapter adapter;
-        private final RecyclerView.AdapterDataObserver observer = new RecyclerView.AdapterDataObserver() {
-            @Override
-            public void onChanged() {
-                binding.swipeRefreshLayout.setRefreshing(!adapter.isLoaded());
+    class ModuleListFragment : Fragment() {
+        var binding: SwiperefreshRecyclerviewBinding? = null
+        private var adapter: ModuleAdapter? = null
+        private val observer: AdapterDataObserver = object : AdapterDataObserver() {
+            override fun onChanged() {
+                binding!!.swipeRefreshLayout.setRefreshing(!adapter!!.isDataLoaded())
             }
-        };
+        }
 
-        private final View.OnAttachStateChangeListener searchViewLocker = new View.OnAttachStateChangeListener() {
-            @Override
-            public void onViewAttachedToWindow(@NonNull View v) {
-                binding.recyclerView.setNestedScrollingEnabled(false);
+        private val searchViewLocker: OnAttachStateChangeListener =
+            object : OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) {
+                    binding!!.recyclerView.setNestedScrollingEnabled(false)
+                }
+
+                override fun onViewDetachedFromWindow(v: View) {
+                    binding!!.recyclerView.setNestedScrollingEnabled(true)
+                }
             }
 
-            @Override
-            public void onViewDetachedFromWindow(@NonNull View v) {
-                binding.recyclerView.setNestedScrollingEnabled(true);
-            }
-        };
-
-        @Nullable
-        @Override
-        public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-            ModulesFragment fragment = (ModulesFragment) getParentFragment();
-            Bundle arguments = getArguments();
+        override fun onCreateView(
+            inflater: LayoutInflater,
+            container: ViewGroup?,
+            savedInstanceState: Bundle?
+        ): View? {
+            val fragment = getParentFragment() as ModulesFragment?
+            val arguments = getArguments()
             if (fragment == null || arguments == null) {
-                return null;
+                return null
             }
-            int userId = arguments.getInt("user_id");
-            binding = SwiperefreshRecyclerviewBinding.inflate(getLayoutInflater(), container, false);
-            adapter = fragment.adapters.get(userId);
-            binding.recyclerView.setAdapter(adapter);
-            binding.recyclerView.setLayoutManager(new LinearLayoutManager(requireActivity()));
-            binding.swipeRefreshLayout.setOnRefreshListener(adapter::fullRefresh);
-            binding.swipeRefreshLayout.setProgressViewEndTarget(true, binding.swipeRefreshLayout.getProgressViewEndOffset());
-            RecyclerViewKt.fixEdgeEffect(binding.recyclerView, false, true);
-            adapter.registerAdapterDataObserver(observer);
-            return binding.getRoot();
+            val userId = arguments.getInt("user_id")
+            binding = SwiperefreshRecyclerviewBinding.inflate(getLayoutInflater(), container, false)
+            adapter = fragment.adapters.get(userId)
+            binding!!.recyclerView.setAdapter(adapter)
+            binding!!.recyclerView.setLayoutManager(LinearLayoutManager(requireActivity()))
+            binding!!.swipeRefreshLayout.setOnRefreshListener(OnRefreshListener { adapter!!.fullRefresh() })
+            binding!!.swipeRefreshLayout.setProgressViewEndTarget(
+                true,
+                binding!!.swipeRefreshLayout.getProgressViewEndOffset()
+            )
+            binding!!.recyclerView.fixEdgeEffect(false, true)
+            adapter!!.registerAdapterDataObserver(observer)
+            return binding!!.getRoot()
         }
 
-        void attachListeners() {
-            var parent = getParentFragment();
-            if (parent instanceof ModulesFragment moduleFragment) {
-                binding.recyclerView.getBorderViewDelegate().setBorderVisibilityChangedListener((top, oldTop, bottom, oldBottom) -> moduleFragment.binding.appBar.setLifted(!top));
-                moduleFragment.binding.appBar.setLifted(!binding.recyclerView.getBorderViewDelegate().isShowingTopBorder());
-                moduleFragment.searchView.addOnAttachStateChangeListener(searchViewLocker);
-                binding.recyclerView.setNestedScrollingEnabled(moduleFragment.searchView.isIconified());
-                View.OnClickListener l = v -> {
-                    if (moduleFragment.searchView.isIconified()) {
-                        binding.recyclerView.smoothScrollToPosition(0);
-                        moduleFragment.binding.appBar.setExpanded(true, true);
+        fun attachListeners() {
+            val parent = getParentFragment()
+            if (parent is ModulesFragment) {
+                binding!!.recyclerView.getBorderViewDelegate()
+                    .setBorderVisibilityChangedListener(OnBorderVisibilityChangedListener { top: Boolean, oldTop: Boolean, bottom: Boolean, oldBottom: Boolean ->
+                        parent.binding!!.appBar.setLifted(!top)
+                    })
+                parent.binding!!.appBar.setLifted(
+                    !binding!!.recyclerView.getBorderViewDelegate().isShowingTopBorder()
+                )
+                parent.searchView!!.addOnAttachStateChangeListener(searchViewLocker)
+                binding!!.recyclerView.setNestedScrollingEnabled(parent.searchView!!.isIconified())
+                val l = View.OnClickListener { v: View? ->
+                    if (parent.searchView!!.isIconified()) {
+                        binding!!.recyclerView.smoothScrollToPosition(0)
+                        parent.binding!!.appBar.setExpanded(true, true)
                     }
-                };
-                moduleFragment.binding.clickView.setOnClickListener(l);
-                moduleFragment.binding.toolbar.setOnClickListener(l);
+                }
+                parent.binding!!.clickView.setOnClickListener(l)
+                parent.binding!!.toolbar.setOnClickListener(l)
             }
         }
 
-        void detachListeners() {
-            binding.recyclerView.getBorderViewDelegate().setBorderVisibilityChangedListener(null);
-            var parent = getParentFragment();
-            if (parent instanceof ModulesFragment moduleFragment) {
-                moduleFragment.searchView.removeOnAttachStateChangeListener(searchViewLocker);
-                binding.recyclerView.setNestedScrollingEnabled(true);
+        fun detachListeners() {
+            binding!!.recyclerView.getBorderViewDelegate().setBorderVisibilityChangedListener(null)
+            val parent = getParentFragment()
+            if (parent is ModulesFragment) {
+                parent.searchView!!.removeOnAttachStateChangeListener(searchViewLocker)
+                binding!!.recyclerView.setNestedScrollingEnabled(true)
             }
         }
 
-        @Override
-        public void onStart() {
-            super.onStart();
-            attachListeners();
+        override fun onStart() {
+            super.onStart()
+            attachListeners()
         }
 
-        @Override
-        public void onResume() {
-            super.onResume();
-            attachListeners();
+        override fun onResume() {
+            super.onResume()
+            attachListeners()
         }
 
-        @Override
-        public void onDestroyView() {
-            adapter.unregisterAdapterDataObserver(observer);
-            super.onDestroyView();
+        override fun onDestroyView() {
+            adapter!!.unregisterAdapterDataObserver(observer)
+            super.onDestroyView()
         }
 
-        @Override
-        public void onPause() {
-            super.onPause();
-            detachListeners();
+        override fun onPause() {
+            super.onPause()
+            detachListeners()
         }
 
-        @Override
-        public void onStop() {
-            super.onStop();
-            detachListeners();
+        override fun onStop() {
+            super.onStop()
+            detachListeners()
         }
     }
 
-    private class PagerAdapter extends FragmentStateAdapter {
-
-        public PagerAdapter(@NonNull Fragment fragment) {
-            super(fragment);
+    inner class PagerAdapter(fragment: Fragment) : FragmentStateAdapter(fragment) {
+        override fun createFragment(position: Int): Fragment {
+            val bundle = Bundle()
+            bundle.putInt("user_id", adapters.keyAt(position))
+            val fragment: Fragment = ModuleListFragment()
+            fragment.setArguments(bundle)
+            return fragment
         }
 
-        @NonNull
-        @Override
-        public Fragment createFragment(int position) {
-            Bundle bundle = new Bundle();
-            bundle.putInt("user_id", adapters.keyAt(position));
-            Fragment fragment = new ModuleListFragment();
-            fragment.setArguments(bundle);
-            return fragment;
+        override fun getItemCount(): Int {
+            return adapters.size
         }
 
-        @Override
-        public int getItemCount() {
-            return adapters.size();
+        override fun getItemId(position: Int): Long {
+            return adapters.keyAt(position).toLong()
         }
 
-        @Override
-        public long getItemId(int position) {
-            return adapters.keyAt(position);
-        }
-
-        @Override
-        public boolean containsItem(long itemId) {
-            return adapters.indexOfKey((int) itemId) >= 0;
+        override fun containsItem(itemId: Long): Boolean {
+            return adapters.indexOfKey(itemId.toInt()) >= 0
         }
     }
 
-    ModuleAdapter createPickModuleAdapter(UserInfo userInfo) {
-        return new ModuleAdapter(userInfo, true);
+    fun createPickModuleAdapter(userInfo: UserInfo): ModuleAdapter {
+        return ModuleAdapter(userInfo, true)
     }
 
-    class ModuleAdapter extends EmptyStateRecyclerView.EmptyStateAdapter<ModuleAdapter.ViewHolder> implements Filterable {
-        private List<ModuleUtil.InstalledModule> searchList = new ArrayList<>();
-        private List<ModuleUtil.InstalledModule> showList = new ArrayList<>();
-        private final UserInfo user;
-        private final boolean isPick;
-        private boolean isLoaded;
-        private View.OnClickListener onPickListener;
+    inner class ModuleAdapter @JvmOverloads constructor(
+        val user: UserInfo,
+        val isPick: Boolean = false
+    ) : EmptyStateAdapter<ModuleAdapter.ViewHolder?>(), Filterable {
+        private var searchList: MutableList<InstalledModule> = ArrayList<InstalledModule>()
+        private var showList: MutableList<InstalledModule>? = ArrayList<InstalledModule>()
+        override var isLoaded = false
+        private var onPickListener: View.OnClickListener? = null
 
-        ModuleAdapter(UserInfo user) {
-            this(user, false);
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            return ViewHolder(ItemModuleBinding.inflate(getLayoutInflater(), parent, false))
         }
-
-        ModuleAdapter(UserInfo user, boolean isPick) {
-            this.user = user;
-            this.isPick = isPick;
-        }
-
-        public UserInfo getUser() {
-            return user;
-        }
-
-        @NonNull
-        @Override
-        public ModuleAdapter.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            return new ViewHolder(ItemModuleBinding.inflate(getLayoutInflater(), parent, false));
-        }
-
-        public boolean isPick() {
-            return isPick;
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull ModuleAdapter.ViewHolder holder, int position) {
-            ModuleUtil.InstalledModule item = showList.get(position);
-            String appName;
+        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+            super.onBindViewHolder(holder, position)
+            val item = showList!!.get(position)
+            val appName: String?
             if (item.userId != 0) {
-                appName = String.format(LocaleDelegate.getDefaultLocale(), "%s (%d)", item.getAppName(), item.userId);
+                appName = format(
+                    LocaleDelegate.defaultLocale,
+                    "%s (%d)",
+                    item.appName,
+                    item.userId
+                )
             } else {
-                appName = item.getAppName();
+                appName = item.appName
             }
-            holder.appName.setText(appName);
-            GlideApp.with(holder.appIcon)
-                    .load(item.getPackageInfo())
-                    .into(new CustomTarget<Drawable>() {
-                        @Override
-                        public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
-                            holder.appIcon.setImageDrawable(resource);
-                        }
+            holder.appName.setText(appName)
+            Glide.with(holder.appIcon)
+                .load(item.packageName)
+                .into(object : CustomTarget<Drawable?>() {
+                    override fun onResourceReady(
+                        resource: Drawable,
+                        transition: Transition<in Drawable?>?
+                    ) {
+                        holder.appIcon.setImageDrawable(resource)
+                    }
 
-                        @Override
-                        public void onLoadCleared(@Nullable Drawable placeholder) {
-
-                        }
-                    });
-            SpannableStringBuilder sb = new SpannableStringBuilder();
-            if (!item.getDescription().isEmpty()) {
-                sb.append(item.getDescription());
+                    override fun onLoadCleared(placeholder: Drawable?) {
+                    }
+                })
+            var sb = SpannableStringBuilder()
+            if (item.description?.isEmpty() == true) {
+                sb.append(item.description)
             } else {
-                sb.append(getString(R.string.module_empty_description));
+                sb.append(getString(R.string.module_empty_description))
             }
-            holder.appDescription.setText(sb);
-            holder.appDescription.setVisibility(View.VISIBLE);
-            sb = new SpannableStringBuilder();
+            holder.appDescription.setText(sb)
+            holder.appDescription.setVisibility(View.VISIBLE)
+            sb = SpannableStringBuilder()
 
-            int installXposedVersion = ConfigManager.getXposedApiVersion();
-            String warningText = null;
+            val installXposedVersion = ConfigManager.xposedApiVersion
+            var warningText: String? = null
             if (item.minVersion == 0) {
-                warningText = getString(R.string.no_min_version_specified);
+                warningText = getString(R.string.no_min_version_specified)
             } else if (installXposedVersion > 0 && item.minVersion > installXposedVersion) {
-                warningText = getString(R.string.warning_xposed_min_version, item.minVersion);
+                warningText = getString(R.string.warning_xposed_min_version, item.minVersion)
             } else if (item.targetVersion > installXposedVersion) {
-                warningText = getString(R.string.warning_target_version_higher, item.targetVersion);
+                warningText = getString(R.string.warning_target_version_higher, item.targetVersion)
             } else if (item.minVersion < ModuleUtil.MIN_MODULE_VERSION) {
-                warningText = getString(R.string.warning_min_version_too_low, item.minVersion, ModuleUtil.MIN_MODULE_VERSION);
-            } else if (item.isInstalledOnExternalStorage()) {
-                warningText = getString(R.string.warning_installed_on_external_storage);
+                warningText = getString(
+                    R.string.warning_min_version_too_low,
+                    item.minVersion,
+                    ModuleUtil.MIN_MODULE_VERSION
+                )
+            } else if (item.isInstalledOnExternalStorage) {
+                warningText = getString(R.string.warning_installed_on_external_storage)
             }
             if (warningText != null) {
-                sb.append(warningText);
-                final ForegroundColorSpan foregroundColorSpan = new ForegroundColorSpan(ResourceUtils.resolveColor(requireActivity().getTheme(), com.google.android.material.R.attr.colorError));
+                sb.append(warningText)
+                val foregroundColorSpan = ForegroundColorSpan(
+                    ResourceUtils.resolveColor(
+                        requireActivity().getTheme(),
+                        com.google.android.material.R.attr.colorError
+                    )
+                )
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    final TypefaceSpan typefaceSpan = new TypefaceSpan(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-                    sb.setSpan(typefaceSpan, sb.length() - warningText.length(), sb.length(), Spannable.SPAN_INCLUSIVE_INCLUSIVE);
+                    val typefaceSpan =
+                        TypefaceSpan(Typeface.create("sans-serif-medium", Typeface.NORMAL))
+                    sb.setSpan(
+                        typefaceSpan,
+                        sb.length - warningText.length,
+                        sb.length,
+                        Spannable.SPAN_INCLUSIVE_INCLUSIVE
+                    )
                 } else {
-                    final StyleSpan styleSpan = new StyleSpan(Typeface.BOLD);
-                    sb.setSpan(styleSpan, sb.length() - warningText.length(), sb.length(), Spannable.SPAN_INCLUSIVE_INCLUSIVE);
+                    val styleSpan = StyleSpan(Typeface.BOLD)
+                    sb.setSpan(
+                        styleSpan,
+                        sb.length - warningText.length,
+                        sb.length,
+                        Spannable.SPAN_INCLUSIVE_INCLUSIVE
+                    )
                 }
-                sb.setSpan(foregroundColorSpan, sb.length() - warningText.length(), sb.length(), Spannable.SPAN_INCLUSIVE_INCLUSIVE);
+                sb.setSpan(
+                    foregroundColorSpan,
+                    sb.length - warningText.length,
+                    sb.length,
+                    Spannable.SPAN_INCLUSIVE_INCLUSIVE
+                )
             }
-            var ver = repoLoader.getModuleLatestVersion(item.packageName);
-            if (ver != null && ver.upgradable(item.versionCode, item.versionName)) {
-                if (warningText != null) sb.append("\n");
-                String recommended = getString(R.string.update_available, ver.versionName);
-                sb.append(recommended);
-                final ForegroundColorSpan foregroundColorSpan = new ForegroundColorSpan(ResourceUtils.resolveColor(requireActivity().getTheme(), androidx.appcompat.R.attr.colorPrimary));
+            val ver: RepoLoader.ModuleVersion? = repoLoader?.getModuleLatestVersion(item.packageName)
+            if (ver != null && ver.upgradable(item.versionCode, item.versionName.toString())) {
+                if (warningText != null) sb.append("\n")
+                val recommended = getString(R.string.update_available, ver.versionName)
+                sb.append(recommended)
+                val foregroundColorSpan = ForegroundColorSpan(
+                    ResourceUtils.resolveColor(
+                        requireActivity().getTheme(),
+                        androidx.appcompat.R.attr.colorPrimary
+                    )
+                )
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    final TypefaceSpan typefaceSpan = new TypefaceSpan(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-                    sb.setSpan(typefaceSpan, sb.length() - recommended.length(), sb.length(), Spannable.SPAN_INCLUSIVE_INCLUSIVE);
+                    val typefaceSpan =
+                        TypefaceSpan(Typeface.create("sans-serif-medium", Typeface.NORMAL))
+                    sb.setSpan(
+                        typefaceSpan,
+                        sb.length - recommended.length,
+                        sb.length,
+                        Spannable.SPAN_INCLUSIVE_INCLUSIVE
+                    )
                 } else {
-                    final StyleSpan styleSpan = new StyleSpan(Typeface.BOLD);
-                    sb.setSpan(styleSpan, sb.length() - recommended.length(), sb.length(), Spannable.SPAN_INCLUSIVE_INCLUSIVE);
+                    val styleSpan = StyleSpan(Typeface.BOLD)
+                    sb.setSpan(
+                        styleSpan,
+                        sb.length - recommended.length,
+                        sb.length,
+                        Spannable.SPAN_INCLUSIVE_INCLUSIVE
+                    )
                 }
-                sb.setSpan(foregroundColorSpan, sb.length() - recommended.length(), sb.length(), Spannable.SPAN_INCLUSIVE_INCLUSIVE);
+                sb.setSpan(
+                    foregroundColorSpan,
+                    sb.length - recommended.length,
+                    sb.length,
+                    Spannable.SPAN_INCLUSIVE_INCLUSIVE
+                )
             }
-            if (sb.length() == 0) {
-                holder.hint.setVisibility(View.GONE);
+            if (sb.length == 0) {
+                holder.hint.setVisibility(View.GONE)
             } else {
-                holder.hint.setVisibility(View.VISIBLE);
-                holder.hint.setText(sb);
+                holder.hint.setVisibility(View.VISIBLE)
+                holder.hint.setText(sb)
             }
 
             if (!isPick) {
-                holder.root.setAlpha(moduleUtil.isModuleEnabled(item.packageName) ? 1.0f : .5f);
-                holder.itemView.setOnClickListener(v -> {
-                    searchView.clearFocus();
-                    if (isLoaded()) {
-                        safeNavigate(ModulesFragmentDirections.actionModulesFragmentToAppListFragment(item.packageName, item.userId));
+                holder.root.setAlpha(if (moduleUtil?.isModuleEnabled(item.packageName) == true) 1.0f else .5f)
+                holder.itemView.setOnClickListener(View.OnClickListener { v: View? ->
+                    searchView!!.clearFocus()
+                    if (isDataLoaded()) {
+                        safeNavigate(
+                            ModulesFragmentDirections.actionModulesFragmentToAppListFragment(
+                                item.packageName,
+                                item.userId
+                            )
+                        )
                     }
-                });
-                holder.itemView.setOnLongClickListener(v -> {
-                    searchView.clearFocus();
-                    selectedModule = item;
-                    return false;
-                });
-                holder.itemView.setOnCreateContextMenuListener((menu, v, menuInfo) -> {
-                    requireActivity().getMenuInflater().inflate(R.menu.context_menu_modules, menu);
-                    menu.setHeaderTitle(item.getAppName());
-                    Intent intent = AppHelper.getSettingsIntent(item.packageName, item.userId);
+                })
+                holder.itemView.setOnLongClickListener(OnLongClickListener { v: View? ->
+                    searchView!!.clearFocus()
+                    selectedModule = item
+                    false
+                })
+                holder.itemView.setOnCreateContextMenuListener(OnCreateContextMenuListener { menu: ContextMenu?, v: View?, menuInfo: ContextMenuInfo? ->
+                    requireActivity().getMenuInflater().inflate(R.menu.context_menu_modules, menu)
+                    menu!!.setHeaderTitle(item.appName)
+                    val intent = AppHelper.getSettingsIntent(item.packageName, item.userId)
                     if (intent == null) {
-                        menu.removeItem(R.id.menu_launch);
+                        menu.removeItem(R.id.menu_launch)
                     }
-                    if (repoLoader.getOnlineModule(item.packageName) == null) {
-                        menu.removeItem(R.id.menu_repo);
+                    if (repoLoader?.getOnlineModule(item.packageName) == null) {
+                        menu.removeItem(R.id.menu_repo)
                     }
                     if (item.userId == 0) {
-                        var users = ConfigManager.getUsers();
+                        val users = ConfigManager.users
                         if (users != null) {
-                            for (var user : users) {
-                                if (moduleUtil.getModule(item.packageName, user.id) == null) {
-                                    menu.add(1, user.id, 0, getString(R.string.install_to_user, user.name)).setOnMenuItemClickListener(i -> {
-                                        installModuleToUser(selectedModule, user);
-                                        return true;
-                                    });
+                            for (user in users) {
+                                user?.id?.let {
+                                    if (moduleUtil?.getModule(item.packageName, it) == null) {
+                                        user.id.let {
+                                            menu.add(
+                                                1,
+                                                it,
+                                                0,
+                                                getString(R.string.install_to_user, user.name)
+                                            )
+                                        }?.setOnMenuItemClickListener(
+                                            MenuItem.OnMenuItemClickListener { i: MenuItem? ->
+                                                installModuleToUser(selectedModule!!, user)
+                                                true
+                                            })
+                                    }
                                 }
                             }
                         }
                     }
-                });
-                holder.appVersion.setVisibility(View.VISIBLE);
-                holder.appVersion.setText(item.versionName);
-                holder.appVersion.setSelected(true);
+                })
+                holder.appVersion.setVisibility(View.VISIBLE)
+                holder.appVersion.setText(item.versionName)
+                holder.appVersion.setSelected(true)
             } else {
-                holder.itemView.setTag(item);
-                holder.itemView.setOnClickListener(v -> {
-                    if (onPickListener != null) onPickListener.onClick(v);
-                });
+                holder.itemView.setTag(item)
+                holder.itemView.setOnClickListener(View.OnClickListener { v: View? ->
+                    if (onPickListener != null) onPickListener!!.onClick(v)
+                })
             }
         }
 
-        @Override
-        public void onViewRecycled(@NonNull ViewHolder holder) {
-            holder.itemView.setTag(null);
-            super.onViewRecycled(holder);
+        override fun onViewRecycled(holder: ViewHolder) {
+            holder.itemView.setTag(null)
+            super.onViewRecycled(holder)
         }
 
-        @Override
-        public int getItemCount() {
-            return showList.size();
+        override fun getItemCount(): Int {
+            return showList!!.size
         }
 
-        @Override
-        public long getItemId(int position) {
-            var module = showList.get(position);
-            return (module.packageName + "!" + module.userId).hashCode();
+        override fun getItemId(position: Int): Long {
+            val module = showList!!.get(position)
+            return (module.packageName + "!" + module.userId).hashCode().toLong()
         }
 
-        @Override
-        public Filter getFilter() {
-            return new ModuleAdapter.ApplicationFilter();
+        override fun getFilter(): Filter? {
+            return ApplicationFilter() // Create an instance of ApplicationFilter
         }
 
-        public void setOnPickListener(View.OnClickListener onPickListener) {
-            this.onPickListener = onPickListener;
+        fun setOnPickListener(onPickListener: View.OnClickListener?) {
+            this.onPickListener = onPickListener
         }
 
-        public void refresh() {
-            runAsync(reloadModules);
+        fun refresh() {
+            runAsync(reloadModules)
         }
 
-        public void fullRefresh() {
-            runAsync(() -> {
-                setLoaded(null, false);
-                moduleUtil.reloadInstalledModules();
-                refresh();
-            });
+        fun fullRefresh() {
+            runAsync(Runnable {
+                setLoaded(null, false)
+                moduleUtil?.reloadInstalledModules()
+                refresh()
+            })
         }
 
-        private final Runnable reloadModules = () -> {
-            var modules = moduleUtil.getModules();
-            if (modules == null) return;
-            Comparator<PackageInfo> cmp = AppHelper.getAppListComparator(0, pm);
-            setLoaded(null, false);
-            var tmpList = new ArrayList<ModuleUtil.InstalledModule>();
-            modules.values().parallelStream()
-                    .sorted((a, b) -> {
-                        boolean aChecked = moduleUtil.isModuleEnabled(a.packageName);
-                        boolean bChecked = moduleUtil.isModuleEnabled(b.packageName);
-                        if (aChecked == bChecked) {
-                            var c = cmp.compare(a.pkg, b.pkg);
-                            if (c == 0) {
-                                if (a.userId == getUser().id) return -1;
-                                if (b.userId == getUser().id) return 1;
-                                else return Integer.compare(a.userId, b.userId);
-                            }
-                            return c;
-                        } else if (aChecked) {
-                            return -1;
-                        } else {
-                            return 1;
+        private val reloadModules = Runnable {
+            val modules: MutableMap<Pair<String?, Int?>?, InstalledModule?>? =
+                moduleUtil?.modules as MutableMap<Pair<String?, Int?>?, InstalledModule?>?
+            if (modules == null) return@Runnable
+            val cmp = AppHelper.getAppListComparator(0, pm)
+            setLoaded(null, false)
+            val tmpList = ArrayList<InstalledModule>()
+            modules.values.parallelStream()
+                .sorted { a: InstalledModule?, b: InstalledModule? ->
+                    val aChecked: Boolean = moduleUtil?.isModuleEnabled(
+                        a!!.packageName
+                    ) == true
+                    val bChecked: Boolean = moduleUtil?.isModuleEnabled(b!!.packageName) == true
+                    if (aChecked == bChecked) {
+                        val c = cmp?.compare(a?.packageInfo, b?.packageInfo)
+                        if (c == 0) {
+                            if (a?.userId == this.user.id) return@sorted -1
+                            if (b?.userId == this.user.id) return@sorted 1
+                            else return@sorted Integer.compare(a?.userId!!, b?.userId!!)
                         }
-                    }).forEachOrdered(new Consumer<>() {
-                        private final HashSet<String> uniquer = new HashSet<>();
+                        return@sorted c!!
+                    } else if (aChecked) {
+                        return@sorted -1
+                    } else {
+                        return@sorted 1
+                    }
+                }.forEachOrdered(object : Consumer<InstalledModule?> {
+                    private val uniquer = HashSet<String?>()
 
-                        @Override
-                        public void accept(ModuleUtil.InstalledModule module) {
-                            if (isPick()) {
-                                if (!uniquer.contains(module.packageName)) {
-                                    uniquer.add(module.packageName);
-                                    if (module.userId != getUser().id)
-                                        tmpList.add(module);
-                                }
-                            } else if (module.userId == getUser().id) {
-                                tmpList.add(module);
+                    override fun accept(module: InstalledModule?) {
+                        if (isPick) {
+                            if (!uniquer.contains(module?.packageName)) {
+                                uniquer.add(module?.packageName)
+                                if (module?.userId != user.id) module?.let { tmpList.add(it) }
                             }
+                        } else if (module?.userId == user.id) {
+                            tmpList.add(module)
                         }
-                    });
-            String queryStr = searchView != null ? searchView.getQuery().toString() : "";
-            searchList = tmpList;
-            runOnUiThread(() -> getFilter().filter(queryStr));
-        };
+                    }
+                })
+            val queryStr = if (searchView != null) searchView!!.getQuery().toString() else ""
+            searchList = tmpList
+            runOnUiThread(Runnable { getFilter()?.filter(queryStr) })
+        }
 
         @SuppressLint("NotifyDataSetChanged")
-        private void setLoaded(List<ModuleUtil.InstalledModule> list, boolean loaded) {
-            runOnUiThread(() -> {
-                if (list != null) showList = list;
-                isLoaded = loaded;
-                notifyDataSetChanged();
-            });
+        private fun setLoaded(list: MutableList<InstalledModule>?, loaded: Boolean) {
+            runOnUiThread(Runnable {
+                if (list != null) showList = list
+                isLoaded = loaded
+                notifyDataSetChanged()
+            })
         }
 
-        @Override
-        public boolean isLoaded() {
-            return isLoaded && moduleUtil.isModulesLoaded();
+        fun isDataLoaded(): Boolean {
+            return isLoaded && moduleUtil?.isModulesLoaded == true
         }
 
-        static class ViewHolder extends RecyclerView.ViewHolder {
-            ConstraintLayout root;
-            ImageView appIcon;
-            TextView appName;
-            TextView appDescription;
-            TextView appVersion;
-            TextView hint;
-            MaterialCheckBox checkBox;
+        inner class ViewHolder(binding: ItemModuleBinding) :
+            RecyclerView.ViewHolder(binding.getRoot()) {
+            var root: ConstraintLayout
+            var appIcon: ImageView
+            var appName: TextView
+            var appDescription: TextView
+            var appVersion: TextView
+            var hint: TextView
+            var checkBox: MaterialCheckBox?
 
-            ViewHolder(ItemModuleBinding binding) {
-                super(binding.getRoot());
-                root = binding.itemRoot;
-                appIcon = binding.appIcon;
-                appName = binding.appName;
-                appDescription = binding.description;
-                appVersion = binding.versionName;
-                hint = binding.hint;
-                checkBox = binding.checkbox;
+            init {
+                root = binding.itemRoot
+                appIcon = binding.appIcon
+                appName = binding.appName
+                appDescription = binding.description
+                appVersion = binding.versionName
+                hint = binding.hint
+                checkBox = binding.checkbox
             }
         }
 
-        class ApplicationFilter extends Filter {
-
-            private boolean lowercaseContains(String s, String filter) {
-                return !TextUtils.isEmpty(s) && s.toLowerCase().contains(filter);
+        internal inner class ApplicationFilter : Filter() {
+            private fun lowercaseContains(s: String?, filter: String): Boolean {
+                return !TextUtils.isEmpty(s) && s!!.lowercase(Locale.getDefault()).contains(filter)
             }
 
-            @Override
-            protected FilterResults performFiltering(CharSequence constraint) {
-                FilterResults filterResults = new FilterResults();
-                List<ModuleUtil.InstalledModule> filtered = new ArrayList<>();
-                String filter = constraint.toString().toLowerCase();
-                for (ModuleUtil.InstalledModule info : searchList) {
-                    if (lowercaseContains(info.getAppName(), filter) ||
-                            lowercaseContains(info.packageName, filter) ||
-                            lowercaseContains(info.getDescription(), filter)) {
-                        filtered.add(info);
+            override fun performFiltering(constraint: CharSequence): FilterResults {
+                val filterResults = FilterResults()
+                val filtered: MutableList<InstalledModule?> = ArrayList<InstalledModule?>()
+                val filter = constraint.toString().lowercase(Locale.getDefault())
+                for (info in searchList) {
+                    if (lowercaseContains(info.appName, filter) ||
+                        lowercaseContains(info.packageName, filter) ||
+                        lowercaseContains(info.description, filter)
+                    ) {
+                        filtered.add(info)
                     }
                 }
-                filterResults.values = filtered;
-                filterResults.count = filtered.size();
-                return filterResults;
+                filterResults.values = filtered
+                filterResults.count = filtered.size
+                return filterResults
             }
 
-            @Override
-            protected void publishResults(CharSequence constraint, FilterResults results) {
-                //noinspection unchecked
-                setLoaded((List<ModuleUtil.InstalledModule>) results.values, true);
+            override fun publishResults(constraint: CharSequence?, results: FilterResults) {
+                setLoaded(results.values as MutableList<InstalledModule>?, true)
             }
         }
+    }
+
+    companion object {
+        private val pm: PackageManager? = App.instance?.getPackageManager()
+        private val moduleUtil: ModuleUtil? = ModuleUtil.instance
+        private val repoLoader: RepoLoader? = RepoLoader.instance
     }
 }

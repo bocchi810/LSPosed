@@ -16,46 +16,44 @@
  *
  * Copyright (C) 2021 LSPosed Contributors
  */
+package org.lsposed.manager.receivers
 
-package org.lsposed.manager.receivers;
+import android.os.IBinder
+import android.os.Process
+import android.os.RemoteException
+import android.system.Os
+import org.lsposed.lspd.ILSPManagerService
 
-import android.os.IBinder;
-import android.os.Process;
-import android.os.RemoteException;
-import android.system.Os;
-
-import org.lsposed.lspd.ILSPManagerService;
-
-public class LSPManagerServiceHolder implements IBinder.DeathRecipient {
-    private static LSPManagerServiceHolder holder = null;
-    private static ILSPManagerService service = null;
-
-    public static void init(IBinder binder) {
-        if (holder == null) {
-            holder = new LSPManagerServiceHolder(binder);
-        }
+class LSPManagerServiceHolder private constructor(binder: IBinder) : IBinder.DeathRecipient {
+    init {
+        linkToDeath(binder)
+        service = ILSPManagerService.Stub.asInterface(binder)
     }
 
-    public static ILSPManagerService getService() {
-        return service;
-    }
-
-    private LSPManagerServiceHolder(IBinder binder) {
-        linkToDeath(binder);
-        service = ILSPManagerService.Stub.asInterface(binder);
-    }
-
-    private void linkToDeath(IBinder binder) {
+    private fun linkToDeath(binder: IBinder) {
         try {
-            binder.linkToDeath(this, 0);
-        } catch (RemoteException e) {
-            binderDied();
+            binder.linkToDeath(this, 0)
+        } catch (e: RemoteException) {
+            binderDied()
         }
     }
 
-    @Override
-    public void binderDied() {
-        System.exit(0);
-        Process.killProcess(Os.getpid());
+    override fun binderDied() {
+        System.exit(0)
+        Process.killProcess(Os.getpid())
+    }
+
+    companion object {
+        private var holder: LSPManagerServiceHolder? = null
+        @JvmStatic
+        var service: ILSPManagerService? = null
+            private set
+
+        @JvmStatic
+        fun init(binder: IBinder) {
+            if (holder == null) {
+                holder = LSPManagerServiceHolder(binder)
+            }
+        }
     }
 }

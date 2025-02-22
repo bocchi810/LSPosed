@@ -13,130 +13,109 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.lsposed.manager.util
 
-package org.lsposed.manager.util;
+import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
+import android.graphics.Bitmap
+import android.os.Build
+import androidx.annotation.Px
+import com.bumptech.glide.Priority
+import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.Options
+import com.bumptech.glide.load.data.DataFetcher
+import com.bumptech.glide.load.model.ModelLoader
+import com.bumptech.glide.load.model.ModelLoader.LoadData
+import com.bumptech.glide.load.model.ModelLoaderFactory
+import com.bumptech.glide.load.model.MultiModelLoaderFactory
+import com.bumptech.glide.signature.ObjectKey
+import me.zhanghai.android.appiconloader.AppIconLoader
+import org.lsposed.manager.App
 
-import android.content.Context;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInfo;
-import android.graphics.Bitmap;
-import android.os.Build;
+class AppIconModelLoader private constructor(
+    @Px iconSize: Int, shrinkNonAdaptiveIcons: Boolean,
+    context: Context
+) : ModelLoader<PackageInfo?, Bitmap?> {
+    private val mLoader: AppIconLoader
+    private val mContext: Context
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.Px;
-
-import com.bumptech.glide.Priority;
-import com.bumptech.glide.load.DataSource;
-import com.bumptech.glide.load.Options;
-import com.bumptech.glide.load.data.DataFetcher;
-import com.bumptech.glide.load.model.ModelLoader;
-import com.bumptech.glide.load.model.ModelLoaderFactory;
-import com.bumptech.glide.load.model.MultiModelLoaderFactory;
-import com.bumptech.glide.signature.ObjectKey;
-
-import org.lsposed.manager.App;
-
-import me.zhanghai.android.appiconloader.AppIconLoader;
-
-public class AppIconModelLoader implements ModelLoader<PackageInfo, Bitmap> {
-    @NonNull
-    private final AppIconLoader mLoader;
-    @NonNull
-    private final Context mContext;
-
-    private AppIconModelLoader(@Px int iconSize, boolean shrinkNonAdaptiveIcons,
-                               @NonNull Context context) {
-        mLoader = new AppIconLoader(iconSize, shrinkNonAdaptiveIcons, context);
-        mContext = context;
+    init {
+        mLoader = AppIconLoader(iconSize, shrinkNonAdaptiveIcons, context)
+        mContext = context
     }
 
-    @Override
-    public boolean handles(@NonNull PackageInfo model) {
-        return true;
+    override fun handles(model: PackageInfo): Boolean {
+        return true
     }
 
-    @Nullable
-    @Override
-    public LoadData<Bitmap> buildLoadData(@NonNull PackageInfo model, int width, int height,
-                                          @NonNull Options options) {
-        var warpApplicationInfo = new ApplicationInfo(model.applicationInfo);
-        warpApplicationInfo.uid = warpApplicationInfo.uid % App.PER_USER_RANGE;
-        var warpPackageInfo = new PackageInfo();
-        warpPackageInfo.applicationInfo = warpApplicationInfo;
-        warpPackageInfo.versionCode = model.versionCode;
+    override fun buildLoadData(
+        model: PackageInfo, width: Int, height: Int,
+        options: Options
+    ): LoadData<Bitmap?>? {
+        val warpApplicationInfo = ApplicationInfo(model.applicationInfo)
+        warpApplicationInfo.uid = warpApplicationInfo.uid % App.PER_USER_RANGE
+        val warpPackageInfo = PackageInfo()
+        warpPackageInfo.applicationInfo = warpApplicationInfo
+        warpPackageInfo.versionCode = model.versionCode
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            warpPackageInfo.setLongVersionCode(model.getLongVersionCode());
+            warpPackageInfo.setLongVersionCode(model.getLongVersionCode())
         }
-        return new LoadData<>(new ObjectKey(AppIconLoader.getIconKey(warpPackageInfo, mContext)),
-                new Fetcher(mLoader, warpApplicationInfo));
+        return LoadData<Bitmap?>(
+            ObjectKey(AppIconLoader.getIconKey(warpPackageInfo, mContext)),
+            Fetcher(mLoader, warpApplicationInfo)
+        )
     }
 
-    private static class Fetcher implements DataFetcher<Bitmap> {
-        @NonNull
-        private final AppIconLoader mLoader;
-        @NonNull
-        private final ApplicationInfo mApplicationInfo;
-
-        public Fetcher(@NonNull AppIconLoader loader, @NonNull ApplicationInfo applicationInfo) {
-            mLoader = loader;
-            mApplicationInfo = applicationInfo;
-        }
-
-        @Override
-        public void loadData(@NonNull Priority priority,
-                             @NonNull DataCallback<? super Bitmap> callback) {
+    private class Fetcher(
+        private val mLoader: AppIconLoader,
+        private val mApplicationInfo: ApplicationInfo
+    ) : DataFetcher<Bitmap?> {
+        override fun loadData(
+            priority: Priority,
+            callback: DataFetcher.DataCallback<in Bitmap?>
+        ) {
             try {
-                Bitmap icon = mLoader.loadIcon(mApplicationInfo);
-                callback.onDataReady(icon);
-            } catch (Exception e) {
-                callback.onLoadFailed(e);
+                val icon = mLoader.loadIcon(mApplicationInfo)
+                callback.onDataReady(icon)
+            } catch (e: Exception) {
+                callback.onLoadFailed(e)
             }
         }
 
-        @Override
-        public void cleanup() {
+        override fun cleanup() {
         }
 
-        @Override
-        public void cancel() {
+        override fun cancel() {
         }
 
-        @NonNull
-        @Override
-        public Class<Bitmap> getDataClass() {
-            return Bitmap.class;
+        override fun getDataClass(): Class<Bitmap?> {
+            return Bitmap::class.java as Class<Bitmap?>
         }
 
-        @NonNull
-        @Override
-        public DataSource getDataSource() {
-            return DataSource.LOCAL;
+        override fun getDataSource(): DataSource {
+            return DataSource.LOCAL
         }
     }
 
-    public static class Factory implements ModelLoaderFactory<PackageInfo, Bitmap> {
-        @Px
-        private final int mIconSize;
-        private final boolean mShrinkNonAdaptiveIcons;
-        @NonNull
-        private final Context mContext;
+    class Factory(
+        @field:Px @param:Px private val mIconSize: Int,
+        private val mShrinkNonAdaptiveIcons: Boolean,
+        context: Context
+    ) : ModelLoaderFactory<PackageInfo?, Bitmap?> {
+        private val mContext: Context
 
-        public Factory(@Px int iconSize, boolean shrinkNonAdaptiveIcons, @NonNull Context context) {
-            mIconSize = iconSize;
-            mShrinkNonAdaptiveIcons = shrinkNonAdaptiveIcons;
-            mContext = context.getApplicationContext();
+        init {
+            mContext = context.getApplicationContext()
         }
 
-        @NonNull
-        @Override
-        public ModelLoader<PackageInfo, Bitmap> build(
-                @NonNull MultiModelLoaderFactory multiFactory) {
-            return new AppIconModelLoader(mIconSize, mShrinkNonAdaptiveIcons, mContext);
+        override fun build(
+            multiFactory: MultiModelLoaderFactory
+        ): ModelLoader<PackageInfo?, Bitmap?> {
+            return AppIconModelLoader(mIconSize, mShrinkNonAdaptiveIcons, mContext)
         }
 
-        @Override
-        public void teardown() {
+        override fun teardown() {
         }
     }
 }

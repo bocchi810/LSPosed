@@ -17,415 +17,390 @@
  * Copyright (C) 2021 LSPosed Contributors
  */
 
-package org.lsposed.manager.ui.fragment;
+package org.lsposed.manager.ui.fragment
 
-import android.annotation.SuppressLint;
-import android.content.ActivityNotFoundException;
-import android.os.Bundle;
-import android.util.Log;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.HorizontalScrollView;
+import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
+import android.os.Bundle
+import android.util.Log
+import android.view.*
+import android.widget.HorizontalScrollView
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.MenuProvider
+import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.adapter.FragmentStateAdapter
+import com.google.android.material.tabs.TabLayout
+import com.google.android.material.tabs.TabLayoutMediator
+import com.google.android.material.textview.MaterialTextView
+import org.lsposed.manager.App
+import org.lsposed.manager.ConfigManager
+import org.lsposed.manager.R
+import org.lsposed.manager.databinding.FragmentPagerBinding
+import org.lsposed.manager.databinding.ItemLogTextviewBinding
+import org.lsposed.manager.databinding.SwiperefreshRecyclerviewBinding
+import org.lsposed.manager.receivers.LSPManagerServiceHolder
+import org.lsposed.manager.ui.widget.EmptyStateRecyclerView
+import java.io.BufferedReader
+import java.io.FileInputStream
+import java.io.InputStreamReader
+import java.time.LocalDateTime
+import java.util.*
+import java.util.stream.Collectors
+import androidx.core.content.edit
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.core.view.MenuProvider;
-import androidx.fragment.app.Fragment;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-import androidx.viewpager2.adapter.FragmentStateAdapter;
-
-import com.google.android.material.tabs.TabLayout;
-import com.google.android.material.tabs.TabLayoutMediator;
-import com.google.android.material.textview.MaterialTextView;
-
-import org.lsposed.manager.App;
-import org.lsposed.manager.ConfigManager;
-import org.lsposed.manager.R;
-import org.lsposed.manager.databinding.FragmentPagerBinding;
-import org.lsposed.manager.databinding.ItemLogTextviewBinding;
-import org.lsposed.manager.databinding.SwiperefreshRecyclerviewBinding;
-import org.lsposed.manager.receivers.LSPManagerServiceHolder;
-import org.lsposed.manager.ui.widget.EmptyStateRecyclerView;
-
-import java.io.BufferedReader;
-import java.io.FileInputStream;
-import java.io.InputStreamReader;
-import java.time.LocalDateTime;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-
-import rikka.material.app.LocaleDelegate;
-import rikka.recyclerview.RecyclerViewKt;
-
-public class LogsFragment extends BaseFragment implements MenuProvider {
-    private FragmentPagerBinding binding;
-    private LogPageAdapter adapter;
-    private MenuItem wordWrap;
+class LogsFragment : BaseFragment(), MenuProvider {
+    private var binding: FragmentPagerBinding? = null
+    private var adapter: LogPageAdapter? = null
+    private var wordWrap: MenuItem? = null
+    private var optionsItemSelectListener: OptionsItemSelectListener? = null
 
     interface OptionsItemSelectListener {
-        boolean onOptionsItemSelected(@NonNull MenuItem item);
+        fun onOptionsItemSelected(item: MenuItem): Boolean
     }
 
-    private OptionsItemSelectListener optionsItemSelectListener;
-
-    private final ActivityResultLauncher<String> saveLogsLauncher = registerForActivityResult(
-            new ActivityResultContracts.CreateDocument("application/zip"),
-            uri -> {
-                if (uri == null) return;
-                runAsync(() -> {
-                    var context = requireContext();
-                    var cr = context.getContentResolver();
-                    try (var zipFd = cr.openFileDescriptor(uri, "wt")) {
-                        showHint(context.getString(R.string.logs_saving), false);
-                        LSPManagerServiceHolder.getService().getLogs(zipFd);
-                        showHint(context.getString(R.string.logs_saved), true);
-                    } catch (Throwable e) {
-                        var cause = e.getCause();
-                        var message = cause == null ? e.getMessage() : cause.getMessage();
-                        var text = context.getString(R.string.logs_save_failed2, message);
-                        showHint(text, false);
-                        Log.w(App.TAG, "save log", e);
-                    }
-                });
-            });
-
-    @Nullable
-    @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        binding = FragmentPagerBinding.inflate(inflater, container, false);
-        binding.appBar.setLiftable(true);
-        setupToolbar(binding.toolbar, binding.clickView, R.string.Logs, R.menu.menu_logs);
-        binding.toolbar.setNavigationIcon(null);
-        binding.toolbar.setSubtitle(ConfigManager.isVerboseLogEnabled() ? R.string.enabled_verbose_log : R.string.disabled_verbose_log);
-        adapter = new LogPageAdapter(this);
-        binding.viewPager.setAdapter(adapter);
-        new TabLayoutMediator(binding.tabLayout, binding.viewPager, (tab, position) -> tab.setText((int) adapter.getItemId(position))).attach();
-
-        binding.tabLayout.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
-            ViewGroup vg = (ViewGroup) binding.tabLayout.getChildAt(0);
-            int tabLayoutWidth = IntStream.range(0, binding.tabLayout.getTabCount()).map(i -> vg.getChildAt(i).getWidth()).sum();
-            if (tabLayoutWidth <= binding.getRoot().getWidth()) {
-                binding.tabLayout.setTabMode(TabLayout.MODE_FIXED);
-                binding.tabLayout.setTabGravity(TabLayout.GRAVITY_FILL);
+    private val saveLogsLauncher: ActivityResultLauncher<String> = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        runAsync {
+            val context = requireContext()
+            val cr = context.contentResolver
+            try {
+                cr.openFileDescriptor(uri, "wt")?.use { zipFd ->
+                    showHint(context.getString(R.string.logs_saving), false)
+                    LSPManagerServiceHolder.service?.getLogs(zipFd)
+                    showHint(context.getString(R.string.logs_saved), true)
+                }
+            } catch (e: Throwable) {
+                val cause = e.cause
+                val message = cause?.message ?: e.message
+                val text = context.getString(R.string.logs_save_failed2, message)
+                showHint(text, false)
+                Log.w(App.TAG, "save log", e)
             }
-        });
-
-        return binding.getRoot();
-    }
-
-    public void setOptionsItemSelectListener(OptionsItemSelectListener optionsItemSelectListener) {
-        this.optionsItemSelectListener = optionsItemSelectListener;
-    }
-
-    @Override
-    public boolean onMenuItemSelected(@NonNull MenuItem item) {
-        var itemId = item.getItemId();
-        if (itemId == R.id.menu_save) {
-            save();
-            return true;
-        } else if (itemId == R.id.menu_word_wrap) {
-            item.setChecked(!item.isChecked());
-            App.getPreferences().edit().putBoolean("enable_word_wrap", item.isChecked()).apply();
-            binding.viewPager.setUserInputEnabled(item.isChecked());
-            adapter.refresh();
-            return true;
         }
-        if (optionsItemSelectListener != null) {
-            return optionsItemSelectListener.onOptionsItemSelected(item);
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        binding = FragmentPagerBinding.inflate(inflater, container, false)
+        binding?.appBar?.setLiftable(true)
+        setupToolbar(binding?.toolbar!!, binding?.clickView!!, R.string.Logs, R.menu.menu_logs)
+        binding?.toolbar?.setNavigationIcon(null)
+        binding?.toolbar?.subtitle = if (ConfigManager.isVerboseLogEnabled) {
+            getString(R.string.enabled_verbose_log) // 将资源 ID 转换为字符串
+        } else {
+            getString(R.string.disabled_verbose_log) // 将资源 ID 转换为字符串
         }
-        return false;
+
+        adapter = LogPageAdapter(this)
+        binding?.viewPager?.adapter = adapter
+        TabLayoutMediator(binding?.tabLayout!!, binding?.viewPager!!) { tab, position ->
+            tab.setText(getString(adapter?.getItemId(position)?.toInt() ?: 0))
+        }.attach()
+
+        binding?.tabLayout?.addOnLayoutChangeListener { view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            val vg = binding?.tabLayout?.getChildAt(0) as? ViewGroup
+            val tabLayoutWidth = vg?.let {
+                binding?.tabLayout?.tabCount?.let { it1 -> (0 until it1).sumOf { i -> it.getChildAt(i).width } }
+            } ?: 0
+            binding?.root?.width?.let {
+                if (tabLayoutWidth <= it) {
+                    binding?.tabLayout?.tabMode = TabLayout.MODE_FIXED
+                    binding?.tabLayout?.tabGravity = TabLayout.GRAVITY_FILL
+                }
+            }
+        }
+
+        return binding?.root
     }
 
-    @Override
-    public void onPrepareMenu(@NonNull Menu menu) {
-        wordWrap = menu.findItem(R.id.menu_word_wrap);
-        wordWrap.setChecked(App.getPreferences().getBoolean("enable_word_wrap", false));
-        binding.viewPager.setUserInputEnabled(wordWrap.isChecked());
+    fun setOptionsItemSelectListener(listener: OptionsItemSelectListener) {
+        this.optionsItemSelectListener = listener
     }
 
-    @Override
-    public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
-
+    override fun onMenuItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.menu_save -> {
+                save()
+                true
+            }
+            R.id.menu_word_wrap -> {
+                item.isChecked = !item.isChecked
+                App.preferences.edit { putBoolean("enable_word_wrap", item.isChecked) }
+                binding?.viewPager?.isUserInputEnabled = item.isChecked
+                adapter?.refresh()
+                true
+            }
+            else -> optionsItemSelectListener?.onOptionsItemSelected(item) ?: false
+        }
     }
 
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-
-        binding = null;
+    override fun onPrepareMenu(menu: Menu) {
+        wordWrap = menu.findItem(R.id.menu_word_wrap)
+        wordWrap?.isChecked = App.preferences.getBoolean("enable_word_wrap", false)
+        binding?.viewPager?.isUserInputEnabled = wordWrap?.isChecked ?: false
     }
 
-    private void save() {
-        LocalDateTime now = LocalDateTime.now();
-        String filename = String.format(LocaleDelegate.getDefaultLocale(), "LSPosed_%s.zip", now.toString());
+    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {}
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        binding = null
+    }
+
+    private fun save() {
+        val now = LocalDateTime.now()
+        val filename = String.format(Locale.getDefault(), "LSPosed_%s.zip", now.toString())
         try {
-            saveLogsLauncher.launch(filename);
-        } catch (ActivityNotFoundException e) {
-            showHint(R.string.enable_documentui, true);
+            saveLogsLauncher.launch(filename)
+        } catch (e: ActivityNotFoundException) {
+            showHint(R.string.enable_documentui, true)
         }
     }
 
-    public static class LogFragment extends BaseFragment {
-        public static final int SCROLL_THRESHOLD = 500;
-        protected boolean verbose;
-        protected SwiperefreshRecyclerviewBinding binding;
-        protected LogAdaptor adaptor;
-        protected LinearLayoutManager layoutManager;
+    open class LogFragment : BaseFragment() {
+        companion object {
+            const val SCROLL_THRESHOLD = 500
+        }
 
-        class LogAdaptor extends EmptyStateRecyclerView.EmptyStateAdapter<LogAdaptor.ViewHolder> {
-            private List<CharSequence> log = Collections.emptyList();
-            private boolean isLoaded = false;
+        protected var verbose = false
+        protected var binding: SwiperefreshRecyclerviewBinding? = null
+        protected var adaptor: LogAdaptor? = null
+        protected var layoutManager: LinearLayoutManager? = null
 
-            @NonNull
-            @Override
-            public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-                return new ViewHolder(ItemLogTextviewBinding.inflate(getLayoutInflater(), parent, false));
+        open inner class LogAdaptor : EmptyStateRecyclerView.EmptyStateAdapter<LogAdaptor.ViewHolder>() {
+            private var log: List<CharSequence> = emptyList()
+            override var isLoaded = false
+
+            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+                return ViewHolder(ItemLogTextviewBinding.inflate(layoutInflater, parent, false))
             }
 
-            @Override
-            public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-                holder.item.setText(log.get(position));
+            override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+                super.onBindViewHolder(holder, position)
+                holder.item.text = log[position]
             }
 
-            @Override
-            public int getItemCount() {
-                return log.size();
+            override fun getItemCount(): Int {
+                return log.size
             }
 
             @SuppressLint("NotifyDataSetChanged")
-            void refresh(List<CharSequence> log) {
-                runOnUiThread(() -> {
-                    isLoaded = true;
-                    this.log = log;
-                    notifyDataSetChanged();
-                });
+            fun refresh(log: List<CharSequence>) {
+                runOnUiThread {
+                    isLoaded = true
+                    this.log = log
+                    notifyDataSetChanged()
+                }
             }
 
-            void fullRefresh() {
-                runAsync(() -> {
-                    isLoaded = false;
-                    List<CharSequence> tmp;
-                    try (var parcelFileDescriptor = ConfigManager.getLog(verbose);
-                         var br = new BufferedReader(new InputStreamReader(new FileInputStream(parcelFileDescriptor != null ? parcelFileDescriptor.getFileDescriptor() : null)))) {
-                        tmp = br.lines().parallel().collect(Collectors.toList());
-                    } catch (Throwable e) {
-                        tmp = Arrays.asList(Log.getStackTraceString(e).split("\n"));
+            fun fullRefresh() {
+                runAsync {
+                    isLoaded = false
+                    val tmp = try {
+                        ConfigManager.getLog(verbose)?.use { parcelFileDescriptor ->
+                            BufferedReader(InputStreamReader(FileInputStream(parcelFileDescriptor.fileDescriptor))).use { br ->
+                                br.lines().parallel().collect(Collectors.toList())
+                            }
+                        } ?: emptyList()
+                    } catch (e: Throwable) {
+                        Log.getStackTraceString(e).split("\n")
                     }
-                    refresh(tmp);
-                });
-            }
-
-            @Override
-            public boolean isLoaded() {
-                return isLoaded;
-            }
-
-            class ViewHolder extends RecyclerView.ViewHolder {
-                final MaterialTextView item;
-
-                public ViewHolder(ItemLogTextviewBinding binding) {
-                    super(binding.getRoot());
-                    item = binding.logItem;
+                    refresh(tmp)
                 }
             }
+
+            fun isDataLoaded(): Boolean {
+                return isLoaded
+            }
+
+            inner class ViewHolder(binding: ItemLogTextviewBinding) : RecyclerView.ViewHolder(binding.root) {
+                val item: MaterialTextView = binding.logItem
+            }
         }
 
-        protected LogAdaptor createAdaptor() {
-            return new LogAdaptor();
+        protected open fun createAdaptor(): LogAdaptor {
+            return LogAdaptor()
         }
 
-        @Nullable
-        @Override
-        public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-            binding = SwiperefreshRecyclerviewBinding.inflate(getLayoutInflater(), container, false);
-            var arguments = getArguments();
-            if (arguments == null) return null;
-            verbose = arguments.getBoolean("verbose");
-            adaptor = createAdaptor();
-            binding.recyclerView.setAdapter(adaptor);
-            layoutManager = new LinearLayoutManager(requireActivity());
-            binding.recyclerView.setLayoutManager(layoutManager);
-            // ltr even for rtl languages because of log format
-            binding.recyclerView.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-            binding.swipeRefreshLayout.setProgressViewEndTarget(true, binding.swipeRefreshLayout.getProgressViewEndOffset());
-            RecyclerViewKt.fixEdgeEffect(binding.recyclerView, false, true);
-            binding.swipeRefreshLayout.setOnRefreshListener(adaptor::fullRefresh);
-            adaptor.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
-                @Override
-                public void onChanged() {
-                    binding.swipeRefreshLayout.setRefreshing(!adaptor.isLoaded());
+        override fun onCreateView(
+            inflater: LayoutInflater,
+            container: ViewGroup?,
+            savedInstanceState: Bundle?
+        ): View? {
+            binding = SwiperefreshRecyclerviewBinding.inflate(layoutInflater, container, false)
+            verbose = arguments?.getBoolean("verbose") ?: false
+            adaptor = createAdaptor()
+            binding?.recyclerView?.adapter = adaptor
+            layoutManager = LinearLayoutManager(requireActivity())
+            binding?.recyclerView?.layoutManager = layoutManager
+            binding?.recyclerView?.layoutDirection = View.LAYOUT_DIRECTION_LTR // LTR even for RTL languages
+            binding?.swipeRefreshLayout?.progressViewEndOffset?.let { binding?.swipeRefreshLayout?.setProgressViewEndTarget(true, it) }
+            binding?.swipeRefreshLayout?.setOnRefreshListener { adaptor?.fullRefresh() }
+            adaptor?.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
+                override fun onChanged() {
+                    binding?.swipeRefreshLayout?.isRefreshing = adaptor?.isDataLoaded() == false
                 }
-            });
-            adaptor.fullRefresh();
-            return binding.getRoot();
+            })
+            adaptor?.fullRefresh()
+            return binding?.root
         }
 
-        public void scrollToTop(LogsFragment logsFragment) {
-            logsFragment.binding.appBar.setExpanded(true, true);
-            if (layoutManager.findFirstVisibleItemPosition() > SCROLL_THRESHOLD) {
-                binding.recyclerView.scrollToPosition(0);
+        fun scrollToTop(logsFragment: LogsFragment) {
+            logsFragment.binding?.appBar?.setExpanded(true, true)
+            if ((layoutManager?.findFirstVisibleItemPosition() ?: 0) > SCROLL_THRESHOLD) {
+                binding?.recyclerView?.scrollToPosition(0)
             } else {
-                binding.recyclerView.smoothScrollToPosition(0);
+                binding?.recyclerView?.smoothScrollToPosition(0)
             }
         }
 
-        public void scrollToBottom(LogsFragment logsFragment) {
-            logsFragment.binding.appBar.setExpanded(false, true);
-            var end = Math.max(adaptor.getItemCount() - 1, 0);
-            if (adaptor.getItemCount() - layoutManager.findLastVisibleItemPosition() > SCROLL_THRESHOLD) {
-                binding.recyclerView.scrollToPosition(end);
+        fun scrollToBottom(logsFragment: LogsFragment) {
+            logsFragment.binding?.appBar?.setExpanded(false, true)
+            val end = (adaptor?.itemCount ?: 1) - 1
+            if ((adaptor?.itemCount ?: 0) - (layoutManager?.findLastVisibleItemPosition() ?: 0) > SCROLL_THRESHOLD) {
+                binding?.recyclerView?.scrollToPosition(end)
             } else {
-                binding.recyclerView.smoothScrollToPosition(end);
+                binding?.recyclerView?.smoothScrollToPosition(end)
             }
         }
 
-        void attachListeners() {
-            var parent = getParentFragment();
-            if (parent instanceof LogsFragment logsFragment) {
-                logsFragment.binding.appBar.setLifted(!binding.recyclerView.getBorderViewDelegate().isShowingTopBorder());
-                binding.recyclerView.getBorderViewDelegate().setBorderVisibilityChangedListener((top, oldTop, bottom, oldBottom) -> logsFragment.binding.appBar.setLifted(!top));
-                logsFragment.setOptionsItemSelectListener(item -> {
-                    int itemId = item.getItemId();
-                    if (itemId == R.id.menu_scroll_top) {
-                        scrollToTop(logsFragment);
-                    } else if (itemId == R.id.menu_scroll_down) {
-                        scrollToBottom(logsFragment);
-                    } else if (itemId == R.id.menu_clear) {
-                        if (ConfigManager.clearLogs(verbose)) {
-                            logsFragment.showHint(R.string.logs_cleared, true);
-                            adaptor.fullRefresh();
-                        } else {
-                            logsFragment.showHint(R.string.logs_clear_failed_2, true);
+        fun attachListeners() {
+            val parent = parentFragment
+            if (parent is LogsFragment) {
+                parent.binding?.appBar?.isLifted = binding?.recyclerView?.borderViewDelegate?.isShowingTopBorder() == false
+                binding?.recyclerView?.borderViewDelegate?.setBorderVisibilityChangedListener { top, _, _, _ ->
+                    parent.binding?.appBar?.isLifted = !top
+                }
+                parent.setOptionsItemSelectListener(object : LogsFragment.OptionsItemSelectListener {
+                    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+                        return when (item.itemId) {
+                            R.id.menu_scroll_top -> {
+                                scrollToTop(parent)
+                                true
+                            }
+                            R.id.menu_scroll_down -> {
+                                scrollToBottom(parent)
+                                true
+                            }
+                            R.id.menu_clear -> {
+                                if (ConfigManager.clearLogs(verbose)) {
+                                    parent.showHint(R.string.logs_cleared, true)
+                                    adaptor?.fullRefresh()
+                                } else {
+                                    parent.showHint(R.string.logs_clear_failed_2, true)
+                                }
+                                true
+                            }
+                            else -> false
                         }
-                        return true;
                     }
-                    return false;
-                });
-
-                View.OnClickListener l = v -> scrollToTop(logsFragment);
-                logsFragment.binding.clickView.setOnClickListener(l);
-                logsFragment.binding.toolbar.setOnClickListener(l);
+                })
+                val l = View.OnClickListener { scrollToTop(parent) }
+                parent.binding?.clickView?.setOnClickListener(l)
+                parent.binding?.toolbar?.setOnClickListener(l)
             }
         }
 
-        void detachListeners() {
-            binding.recyclerView.getBorderViewDelegate().setBorderVisibilityChangedListener(null);
+        fun detachListeners() {
+            binding?.recyclerView?.borderViewDelegate?.setBorderVisibilityChangedListener(null)
         }
 
-        @Override
-        public void onStart() {
-            super.onStart();
-            attachListeners();
+        override fun onStart() {
+            super.onStart()
+            attachListeners()
         }
 
-        @Override
-        public void onResume() {
-            super.onResume();
-            attachListeners();
+        override fun onResume() {
+            super.onResume()
+            attachListeners()
         }
 
-
-        @Override
-        public void onPause() {
-            super.onPause();
-            detachListeners();
+        override fun onPause() {
+            super.onPause()
+            detachListeners()
         }
 
-        @Override
-        public void onStop() {
-            super.onStop();
-            detachListeners();
+        override fun onStop() {
+            super.onStop()
+            detachListeners()
         }
     }
 
-    public static class UnwrapLogFragment extends LogFragment {
-
-        @Nullable
-        @Override
-        public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-            var root = super.onCreateView(inflater, container, savedInstanceState);
-            binding.swipeRefreshLayout.removeView(binding.recyclerView);
-            HorizontalScrollView horizontalScrollView = new HorizontalScrollView(getContext());
-            horizontalScrollView.setFillViewport(true);
-            horizontalScrollView.setHorizontalScrollBarEnabled(false);
-            horizontalScrollView.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-            binding.swipeRefreshLayout.addView(horizontalScrollView);
-            horizontalScrollView.addView(binding.recyclerView);
-            binding.recyclerView.getLayoutParams().width = ViewGroup.LayoutParams.WRAP_CONTENT;
-            return root;
+    class UnwrapLogFragment : LogFragment() {
+        override fun onCreateView(
+            inflater: LayoutInflater,
+            container: ViewGroup?,
+            savedInstanceState: Bundle?
+        ): View? {
+            val root = super.onCreateView(inflater, container, savedInstanceState)
+            binding?.swipeRefreshLayout?.removeView(binding?.recyclerView)
+            val horizontalScrollView = HorizontalScrollView(requireContext())
+            horizontalScrollView.isFillViewport = true
+            horizontalScrollView.isHorizontalScrollBarEnabled = false
+            horizontalScrollView.layoutDirection = View.LAYOUT_DIRECTION_LTR
+            binding?.swipeRefreshLayout?.addView(horizontalScrollView)
+            horizontalScrollView.addView(binding?.recyclerView)
+            binding?.recyclerView?.layoutParams?.width = ViewGroup.LayoutParams.WRAP_CONTENT
+            return root
         }
 
-        @Override
-        protected LogAdaptor createAdaptor() {
-            return new LogAdaptor() {
-                @Override
-                public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-                    super.onBindViewHolder(holder, position);
-                    var view = holder.item;
-                    view.measure(0, 0);
-                    int desiredWidth = view.getMeasuredWidth();
-                    ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
-                    layoutParams.width = desiredWidth;
-                    if (binding.recyclerView.getWidth() < desiredWidth) {
-                        binding.recyclerView.requestLayout();
+        override fun createAdaptor(): LogAdaptor {
+            return object : LogAdaptor() {
+                override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+                    super.onBindViewHolder(holder, position)
+                    val view = holder.item
+                    view.measure(0, 0)
+                    val desiredWidth = view.measuredWidth
+                    val layoutParams = view.layoutParams
+                    layoutParams.width = desiredWidth
+                    if ((binding?.recyclerView?.width ?: 0) < desiredWidth) {
+                        binding?.recyclerView?.requestLayout()
                     }
                 }
-            };
+            }
         }
     }
 
-    class LogPageAdapter extends FragmentStateAdapter {
-
-        public LogPageAdapter(@NonNull Fragment fragment) {
-            super(fragment);
+    inner class LogPageAdapter(fragment: Fragment) : FragmentStateAdapter(fragment) {
+        override fun createFragment(position: Int): Fragment {
+            val bundle = Bundle()
+            bundle.putBoolean("verbose", verbose(position))
+            val f = if (getItemViewType(position) == 0) LogFragment() else UnwrapLogFragment()
+            f.arguments = bundle
+            return f
         }
 
-        @NonNull
-        @Override
-        public Fragment createFragment(int position) {
-            var bundle = new Bundle();
-            bundle.putBoolean("verbose", verbose(position));
-            var f = getItemViewType(position) == 0 ? new LogFragment() : new UnwrapLogFragment();
-            f.setArguments(bundle);
-            return f;
+        override fun getItemCount(): Int {
+            return 2
         }
 
-        @Override
-        public int getItemCount() {
-            return 2;
+        override fun getItemId(position: Int): Long {
+            return if (verbose(position)) R.string.nav_item_logs_verbose.toLong() else R.string.nav_item_logs_module.toLong()
         }
 
-        @Override
-        public long getItemId(int position) {
-            return verbose(position) ? R.string.nav_item_logs_verbose : R.string.nav_item_logs_module;
+        override fun containsItem(itemId: Long): Boolean {
+            return itemId == R.string.nav_item_logs_verbose.toLong() || itemId == R.string.nav_item_logs_module.toLong()
         }
 
-        @Override
-        public boolean containsItem(long itemId) {
-            return itemId == R.string.nav_item_logs_verbose || itemId == R.string.nav_item_logs_module;
+        fun verbose(position: Int): Boolean {
+            return position != 0
         }
 
-        public boolean verbose(int position) {
-            return position != 0;
+        override fun getItemViewType(position: Int): Int {
+            return if (wordWrap?.isChecked == true) 0 else 1
         }
 
-        @Override
-        public int getItemViewType(int position) {
-            return wordWrap.isChecked() ? 0 : 1;
-        }
-
-        public void refresh() {
-            runOnUiThread(this::notifyDataSetChanged);
+        @SuppressLint("NotifyDataSetChanged")
+        fun refresh() {
+            runOnUiThread { notifyDataSetChanged() }
         }
     }
 }

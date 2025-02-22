@@ -16,83 +16,92 @@
  *
  * Copyright (C) 2022 LSPosed Contributors
  */
+package org.lsposed.manager.ui.dialog
 
-package org.lsposed.manager.ui.dialog;
+import android.app.Dialog
+import android.content.DialogInterface
+import android.os.Bundle
+import androidx.fragment.app.DialogFragment
+import androidx.fragment.app.FragmentManager
+import org.lsposed.manager.App
+import org.lsposed.manager.ConfigManager
+import org.lsposed.manager.R
+import org.lsposed.manager.ui.fragment.BaseFragment
+import org.lsposed.manager.util.ShortcutUtil
+import androidx.core.content.edit
 
-import android.app.Dialog;
-import android.os.Bundle;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.fragment.app.DialogFragment;
-import androidx.fragment.app.FragmentManager;
-
-import org.lsposed.manager.App;
-import org.lsposed.manager.ConfigManager;
-import org.lsposed.manager.R;
-import org.lsposed.manager.ui.fragment.BaseFragment;
-import org.lsposed.manager.util.ShortcutUtil;
-
-public class WelcomeDialog extends DialogFragment {
-    private static boolean shown = false;
-
-    private Dialog parasiticDialog(BlurBehindDialogBuilder builder) {
-        var shortcutSupported = ShortcutUtil.isRequestPinShortcutSupported(requireContext());
+class WelcomeDialog : DialogFragment() {
+    private fun parasiticDialog(builder: BlurBehindDialogBuilder): Dialog {
+        val shortcutSupported = ShortcutUtil.isRequestPinShortcutSupported(requireContext())
         builder
-                .setTitle(R.string.parasitic_welcome)
-                .setMessage(shortcutSupported ? R.string.parasitic_welcome_summary :
-                        R.string.parasitic_welcome_summary_no_shortcut_support)
-                .setNegativeButton(R.string.never_show, (dialog, which) ->
-                        App.getPreferences().edit().putBoolean("never_show_welcome", true).apply())
-                .setPositiveButton(android.R.string.ok, null)
-                .setNeutralButton(R.string.create_shortcut, (dialog, which) -> {
-                    var home = (BaseFragment) getParentFragment();
-                    if (!ShortcutUtil.requestPinLaunchShortcut(() -> {
-                        App.getPreferences().edit().putBoolean("never_show_welcome", true).apply();
+            .setTitle(R.string.parasitic_welcome)
+            .setMessage(if (shortcutSupported) R.string.parasitic_welcome_summary else R.string.parasitic_welcome_summary_no_shortcut_support)
+            .setNegativeButton(
+                R.string.never_show,
+                DialogInterface.OnClickListener { dialog: DialogInterface?, which: Int ->
+                    App.preferences.edit { putBoolean("never_show_welcome", true) }
+                })
+            .setPositiveButton(android.R.string.ok, null)
+            .setNeutralButton(
+                R.string.create_shortcut,
+                DialogInterface.OnClickListener { dialog: DialogInterface?, which: Int ->
+                    val home = getParentFragment() as BaseFragment?
+                    if (!ShortcutUtil.requestPinLaunchShortcut(Runnable {
+                            App.preferences.edit {
+                                putBoolean("never_show_welcome", true)
+                            }
+                            if (home != null) {
+                                home.showHint(R.string.settings_shortcut_pinned_hint, false)
+                            }
+                        })) {
                         if (home != null) {
-                            home.showHint(R.string.settings_shortcut_pinned_hint, false);
-                        }
-                    })) {
-                        if (home != null) {
-                            home.showHint(R.string.settings_unsupported_pin_shortcut_summary, false);
+                            home.showHint(R.string.settings_unsupported_pin_shortcut_summary, false)
                         }
                     }
-                });
-        return builder.create();
+                })
+        return builder.create()
     }
 
-    private Dialog appDialog(BlurBehindDialogBuilder builder) {
-
+    private fun appDialog(builder: BlurBehindDialogBuilder): Dialog {
         return builder
-                .setTitle(R.string.app_welcome)
-                .setMessage(R.string.app_welcome_summary)
-                .setNegativeButton(R.string.never_show, (d, w) ->
-                        App.getPreferences().edit().putBoolean("never_show_welcome", true).apply())
-                .setPositiveButton(android.R.string.ok, null)
-                .create();
+            .setTitle(R.string.app_welcome)
+            .setMessage(R.string.app_welcome_summary)
+            .setNegativeButton(
+                R.string.never_show,
+                DialogInterface.OnClickListener { d: DialogInterface?, w: Int ->
+                    App.preferences.edit { putBoolean("never_show_welcome", true) }
+                })
+            .setPositiveButton(android.R.string.ok, null)
+            .create()
     }
 
-    @NonNull
-    @Override
-    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-        var builder = new BlurBehindDialogBuilder(requireContext(),
-                R.style.ThemeOverlay_MaterialAlertDialog_Centered_FullWidthButtons);
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        val builder = BlurBehindDialogBuilder(
+            requireContext(),
+            R.style.ThemeOverlay_MaterialAlertDialog_Centered_FullWidthButtons
+        )
         if (App.isParasitic) {
-            return parasiticDialog(builder);
+            return parasiticDialog(builder)
         } else {
-            return appDialog(builder);
+            return appDialog(builder)
         }
     }
 
-    public static void showIfNeed(FragmentManager fm) {
-        if (shown) return;
-        if (!ConfigManager.isBinderAlive() ||
-                App.getPreferences().getBoolean("never_show_welcome", false) ||
-                (App.isParasitic && ShortcutUtil.isLaunchShortcutPinned())) {
-            shown = true;
-            return;
+    companion object {
+        private var shown = false
+
+        @JvmStatic
+        fun showIfNeed(fm: FragmentManager) {
+            if (shown) return
+            if (!ConfigManager.isBinderAlive ||
+                App.preferences.getBoolean("never_show_welcome", false) ||
+                (App.isParasitic && ShortcutUtil.isLaunchShortcutPinned)
+            ) {
+                shown = true
+                return
+            }
+            WelcomeDialog().show(fm, "welcome")
+            shown = true
         }
-        new WelcomeDialog().show(fm, "welcome");
-        shown = true;
     }
 }

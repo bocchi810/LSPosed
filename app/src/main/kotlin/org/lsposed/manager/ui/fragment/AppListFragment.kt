@@ -1,5 +1,5 @@
 /*
- * <!--This file is part of LSPosed.
+ * This file is part of LSPosed.
  *
  * LSPosed is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,219 +14,198 @@
  * You should have received a copy of the GNU General Public License
  * along with LSPosed.  If not, see <https://www.gnu.org/licenses/>.
  *
- * Copyright (C) 2021 LSPosed Contributors-->
+ * Copyright (C) 2021 LSPosed Contributors
  */
 
-package org.lsposed.manager.ui.fragment;
+package org.lsposed.manager.ui.fragment
 
-import android.content.Intent;
-import android.os.Bundle;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup;
+import android.os.Bundle
+import android.view.*
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.widget.SearchView
+import androidx.core.view.MenuProvider
+import androidx.recyclerview.widget.ConcatAdapter
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import org.lsposed.manager.App
+import org.lsposed.manager.ConfigManager
+import org.lsposed.manager.R
+import org.lsposed.manager.ui.adapters.AppHelper
+import org.lsposed.manager.ui.adapters.ScopeAdapter
+import org.lsposed.manager.databinding.FragmentAppListBinding
+import org.lsposed.manager.util.BackupUtils
+import org.lsposed.manager.util.ModuleUtil
+import rikka.material.app.LocaleDelegate
 
-import androidx.activity.OnBackPressedCallback;
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.widget.SearchView;
-import androidx.core.view.MenuProvider;
-import androidx.recyclerview.widget.ConcatAdapter;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
+class AppListFragment : BaseFragment(), MenuProvider {
 
-import org.lsposed.manager.App;
-import org.lsposed.manager.ConfigManager;
-import org.lsposed.manager.R;
-import org.lsposed.manager.adapters.AppHelper;
-import org.lsposed.manager.adapters.ScopeAdapter;
-import org.lsposed.manager.databinding.FragmentAppListBinding;
-import org.lsposed.manager.util.BackupUtils;
-import org.lsposed.manager.util.ModuleUtil;
+    var searchView: SearchView? = null
+    private var scopeAdapter: ScopeAdapter? = null
+    private var module: ModuleUtil.InstalledModule? = null
 
-import rikka.material.app.LocaleDelegate;
-import rikka.recyclerview.RecyclerViewKt;
+    private var searchListener: SearchView.OnQueryTextListener? = null
+    var binding: FragmentAppListBinding? = null
+    var backupLauncher: ActivityResultLauncher<String>? = null
+    var restoreLauncher: ActivityResultLauncher<Array<String>>? = null
 
-public class AppListFragment extends BaseFragment implements MenuProvider {
-
-    public SearchView searchView;
-    private ScopeAdapter scopeAdapter;
-    private ModuleUtil.InstalledModule module;
-
-    private SearchView.OnQueryTextListener searchListener;
-    public FragmentAppListBinding binding;
-    public ActivityResultLauncher<String> backupLauncher;
-    public ActivityResultLauncher<String[]> restoreLauncher;
-
-    private final RecyclerView.AdapterDataObserver observer = new RecyclerView.AdapterDataObserver() {
-        @Override
-        public void onChanged() {
+    private val observer = object : RecyclerView.AdapterDataObserver() {
+        override fun onChanged() {
             if (binding != null && scopeAdapter != null) {
-                binding.swipeRefreshLayout.setRefreshing(!scopeAdapter.isLoaded());
+                binding!!.swipeRefreshLayout.isRefreshing = !scopeAdapter!!.isLoaded
             }
         }
-    };
+    }
 
-    @Nullable
-    @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        binding = FragmentAppListBinding.inflate(getLayoutInflater(), container, false);
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        binding = FragmentAppListBinding.inflate(layoutInflater, container, false)
         if (module == null) {
-            return binding.getRoot();
+            return binding?.root
         }
-        binding.appBar.setLiftable(true);
-        String title;
-        if (module.userId != 0) {
-            title = String.format(LocaleDelegate.getDefaultLocale(), "%s (%d)", module.getAppName(), module.userId);
+        binding?.appBar?.setLiftable(true)
+        val title = if (module!!.userId != 0) {
+            String.format(LocaleDelegate.defaultLocale, "%s (%d)", module!!.appName, module!!.userId)
         } else {
-            title = module.getAppName();
+            module!!.appName
         }
-        binding.toolbar.setSubtitle(module.packageName);
+        binding?.toolbar?.subtitle = module!!.packageName
 
-        scopeAdapter = new ScopeAdapter(this, module);
-        scopeAdapter.setHasStableIds(true);
-        scopeAdapter.registerAdapterDataObserver(observer);
-        var concatAdapter = new ConcatAdapter();
-        concatAdapter.addAdapter(scopeAdapter.switchAdaptor);
-        concatAdapter.addAdapter(scopeAdapter);
-        binding.recyclerView.setAdapter(concatAdapter);
-        binding.recyclerView.setHasFixedSize(true);
-        binding.recyclerView.setLayoutManager(new LinearLayoutManager(requireActivity()));
-        binding.recyclerView.getBorderViewDelegate().setBorderVisibilityChangedListener((top, oldTop, bottom, oldBottom) -> binding.appBar.setLifted(!top));
-        RecyclerViewKt.fixEdgeEffect(binding.recyclerView, false, true);
-        binding.swipeRefreshLayout.setOnRefreshListener(() -> scopeAdapter.refresh(true));
-        binding.swipeRefreshLayout.setProgressViewEndTarget(true, binding.swipeRefreshLayout.getProgressViewEndOffset());
-        Intent intent = AppHelper.getSettingsIntent(module.packageName, module.userId);
+        scopeAdapter = ScopeAdapter(this, module!!)
+        scopeAdapter?.setHasStableIds(true)
+        scopeAdapter?.registerAdapterDataObserver(observer)
+        val concatAdapter = ConcatAdapter()
+        concatAdapter.addAdapter(scopeAdapter!!.switchAdaptor)
+        concatAdapter.addAdapter(scopeAdapter!!)
+        binding?.recyclerView?.adapter = concatAdapter
+        binding?.recyclerView?.setHasFixedSize(true)
+        binding?.recyclerView?.layoutManager = LinearLayoutManager(requireActivity())
+        binding?.recyclerView?.borderViewDelegate?.setBorderVisibilityChangedListener { top, _, _, _ ->
+            binding?.appBar?.isLifted = !top
+        }
+        binding?.recyclerView?.overScrollMode = View.OVER_SCROLL_NEVER // 禁用过度滚动效果
+        binding?.recyclerView?.edgeEffectFactory = RecyclerView.EdgeEffectFactory() // 使用默认的边缘效果
+        binding?.swipeRefreshLayout?.setOnRefreshListener { scopeAdapter?.refresh(true) }
+        binding?.swipeRefreshLayout?.setProgressViewEndTarget(true, binding?.swipeRefreshLayout?.progressViewEndOffset!!)
+        val intent = AppHelper.getSettingsIntent(module!!.packageName, module!!.userId)
         if (intent == null) {
-            binding.fab.setVisibility(View.GONE);
+            binding?.fab?.visibility = View.GONE
         } else {
-            binding.fab.setVisibility(View.VISIBLE);
-            binding.fab.setOnClickListener(v -> ConfigManager.startActivityAsUserWithFeature(intent, module.userId));
-        }
-        searchListener = scopeAdapter.getSearchListener();
-
-        setupToolbar(binding.toolbar, binding.clickView, title, R.menu.menu_app_list, view -> requireActivity().getOnBackPressedDispatcher().onBackPressed());
-        View.OnClickListener l = v -> {
-            if (searchView.isIconified()) {
-                binding.recyclerView.smoothScrollToPosition(0);
-                binding.appBar.setExpanded(true, true);
+            binding?.fab?.visibility = View.VISIBLE
+            binding?.fab?.setOnClickListener {
+                ConfigManager.startActivityAsUserWithFeature(intent, module!!.userId)
             }
-        };
-        binding.toolbar.setOnClickListener(l);
-        binding.clickView.setOnClickListener(l);
+        }
 
-        return binding.getRoot();
+        setupToolbar(binding?.toolbar!!, binding?.clickView!!, title, R.menu.menu_app_list) {
+            requireActivity().onBackPressedDispatcher.onBackPressed()
+        }
+        val l = View.OnClickListener {
+            if (searchView?.isIconified == true) {
+                binding?.recyclerView?.smoothScrollToPosition(0)
+                binding?.appBar?.setExpanded(true, true)
+            }
+        }
+        binding?.toolbar?.setOnClickListener(l)
+        binding?.clickView?.setOnClickListener(l)
+
+        return binding?.root
     }
 
-    @Override
-    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        super.onViewCreated(view, savedInstanceState);
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
         if (module == null) {
             if (!safeNavigate(R.id.action_app_list_fragment_to_modules_fragment)) {
-                safeNavigate(R.id.modules_nav);
+                safeNavigate(R.id.modules_nav)
             }
         }
     }
 
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        AppListFragmentArgs args = AppListFragmentArgs.fromBundle(getArguments());
-        String modulePackageName = args.getModulePackageName();
-        int moduleUserId = args.getModuleUserId();
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val args = AppListFragmentArgs.fromBundle(requireArguments())
+        val modulePackageName = args.modulePackageName
+        val moduleUserId = args.moduleUserId
 
-        module = ModuleUtil.getInstance().getModule(modulePackageName, moduleUserId);
+        module = ModuleUtil.instance?.getModule(modulePackageName, moduleUserId)
         if (module == null) {
             if (!safeNavigate(R.id.action_app_list_fragment_to_modules_fragment)) {
-                safeNavigate(R.id.modules_nav);
+                safeNavigate(R.id.modules_nav)
             }
         }
 
-        backupLauncher = registerForActivityResult(new ActivityResultContracts.CreateDocument("application/gzip"),
-                uri -> {
-                    if (uri == null) return;
-                    runAsync(() -> {
-                        try {
-                            BackupUtils.backup(uri, modulePackageName);
-                        } catch (Exception e) {
-                            var text = App.getInstance().getString(R.string.settings_backup_failed2, e.getMessage());
-                            showHint(text, false);
-                        }
-                    });
-                });
-        restoreLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocument(),
-                uri -> {
-                    if (uri == null) return;
-                    runAsync(() -> {
-                        try {
-                            BackupUtils.restore(uri, modulePackageName);
-                        } catch (Exception e) {
-                            var text = App.getInstance().getString(R.string.settings_restore_failed2, e.getMessage());
-                            showHint(text, false);
-                        }
-                    });
-                });
-
-        requireActivity().getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override
-            public void handleOnBackPressed() {
-                scopeAdapter.onBackPressed();
+        backupLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/gzip")) { uri ->
+            if (uri == null) return@registerForActivityResult
+            runAsync {
+                try {
+                    BackupUtils.backup(uri, modulePackageName)
+                } catch (e: Exception) {
+                    val text = App.instance?.getString(R.string.settings_backup_failed2, e.message)
+                    showHint(text.toString(), false)
+                }
             }
-        });
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (scopeAdapter != null) scopeAdapter.refresh();
-    }
-
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        if (scopeAdapter != null) scopeAdapter.unregisterAdapterDataObserver(observer);
-        binding = null;
-    }
-
-    @Override
-    public boolean onMenuItemSelected(@NonNull MenuItem item) {
-        return scopeAdapter.onOptionsItemSelected(item);
-    }
-
-    @Override
-    public void onPrepareMenu(@NonNull Menu menu) {
-        searchView = (SearchView) menu.findItem(R.id.menu_search).getActionView();
-        searchView.setOnQueryTextListener(searchListener);
-        searchView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-            @Override
-            public void onViewAttachedToWindow(View arg0) {
-                binding.appBar.setExpanded(false, true);
-                binding.recyclerView.setNestedScrollingEnabled(false);
-            }
-
-            @Override
-            public void onViewDetachedFromWindow(View v) {
-                binding.recyclerView.setNestedScrollingEnabled(true);
-            }
-        });
-        searchView.findViewById(androidx.appcompat.R.id.search_edit_frame).setLayoutDirection(View.LAYOUT_DIRECTION_INHERIT);
-        scopeAdapter.onPrepareOptionsMenu(menu);
-    }
-
-    @Override
-    public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
-
-    }
-
-    @Override
-    public boolean onContextItemSelected(@NonNull MenuItem item) {
-        if (scopeAdapter.onContextItemSelected(item)) {
-            return true;
         }
-        return super.onContextItemSelected(item);
+        restoreLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            runAsync {
+                try {
+                    BackupUtils.restore(uri, modulePackageName)
+                } catch (e: Exception) {
+                    val text = App.instance?.getString(R.string.settings_restore_failed2, e.message)
+                    showHint(text.toString(), false)
+                }
+            }
+        }
+
+        requireActivity().onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                scopeAdapter?.onBackPressed()
+            }
+        })
+    }
+
+    override fun onResume() {
+        super.onResume()
+        scopeAdapter?.refresh()
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        scopeAdapter?.unregisterAdapterDataObserver(observer)
+        binding = null
+    }
+
+    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+        return onOptionsItemSelected(menuItem) ?: false
+    }
+
+    override fun onPrepareMenu(menu: Menu) {
+        searchView = menu.findItem(R.id.menu_search).actionView as SearchView
+        searchView?.setOnQueryTextListener(searchListener)
+        searchView?.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(arg0: View) {
+                binding?.appBar?.setExpanded(false, true)
+                binding?.recyclerView?.isNestedScrollingEnabled = false
+            }
+
+            override fun onViewDetachedFromWindow(v: View) {
+                binding?.recyclerView?.isNestedScrollingEnabled = true
+            }
+        })
+        searchView?.findViewById<View>(androidx.appcompat.R.id.search_edit_frame)?.layoutDirection = View.LAYOUT_DIRECTION_INHERIT
+        onPrepareOptionsMenu(menu)
+    }
+
+    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {}
+
+    override fun onContextItemSelected(item: MenuItem): Boolean {
+        if (onContextItemSelected(item) == true) {
+            return true
+        }
+        return super.onContextItemSelected(item)
     }
 }

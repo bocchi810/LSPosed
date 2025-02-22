@@ -16,68 +16,64 @@
  *
  * Copyright (C) 2022 LSPosed Contributors
  */
+package org.lsposed.manager.ui.widget
 
-package org.lsposed.manager.ui.widget;
+import android.annotation.SuppressLint
+import android.content.Context
+import android.util.AttributeSet
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewParent
+import android.webkit.WebView
+import androidx.recyclerview.widget.RecyclerView
+import rikka.widget.borderview.BorderRecyclerView
 
-import android.annotation.SuppressLint;
-import android.content.Context;
-import android.util.AttributeSet;
-import android.view.MotionEvent;
-import android.view.View;
-import android.view.ViewParent;
-import android.webkit.WebView;
+class ScrollWebView : WebView {
+    constructor(context: Context) : super(context)
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.recyclerview.widget.RecyclerView;
+    constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
 
-import rikka.widget.borderview.BorderRecyclerView;
+    constructor(context: Context, attrs: AttributeSet?, defStyleAttr: Int) : super(
+        context,
+        attrs,
+        defStyleAttr
+    )
 
-public class ScrollWebView extends WebView {
-    public ScrollWebView(@NonNull Context context) {
-        super(context);
-    }
-
-    public ScrollWebView(@NonNull Context context, @Nullable AttributeSet attrs) {
-        super(context, attrs);
-    }
-
-    public ScrollWebView(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
-        super(context, attrs, defStyleAttr);
-    }
-
-    public ScrollWebView(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr, int defStyleRes) {
-        super(context, attrs, defStyleAttr, defStyleRes);
-    }
+    constructor(
+        context: Context,
+        attrs: AttributeSet?,
+        defStyleAttr: Int,
+        defStyleRes: Int
+    ) : super(context, attrs, defStyleAttr, defStyleRes)
 
     @SuppressLint("ClickableViewAccessibility")
-    @Override
-    public boolean onTouchEvent(MotionEvent event) {
+    override fun onTouchEvent(event: MotionEvent): Boolean {
         if (event.getAction() == MotionEvent.ACTION_DOWN) {
-            var viewParent = findViewParentIfNeeds(this);
-            if (viewParent != null) viewParent.requestDisallowInterceptTouchEvent(true);
+            val viewParent: ViewParent? = findViewParentIfNeeds(this)
+            if (viewParent != null) viewParent.requestDisallowInterceptTouchEvent(true)
         }
-        return super.onTouchEvent(event);
+        return super.onTouchEvent(event)
     }
 
-    @Override
-    protected void onOverScrolled(int scrollX, int scrollY, boolean clampedX, boolean clampedY) {
+    override fun onOverScrolled(scrollX: Int, scrollY: Int, clampedX: Boolean, clampedY: Boolean) {
         if (clampedX) {
-            var viewParent = findViewParentIfNeeds(this);
-            if (viewParent != null) viewParent.requestDisallowInterceptTouchEvent(false);
+            val viewParent: ViewParent? = findViewParentIfNeeds(this)
+            if (viewParent != null) viewParent.requestDisallowInterceptTouchEvent(false)
         }
-        super.onOverScrolled(scrollX, scrollY, clampedX, clampedY);
+        super.onOverScrolled(scrollX, scrollY, clampedX, clampedY)
     }
 
-    private static ViewParent findViewParentIfNeeds(View v) {
-        var parent = v.getParent();
-        if (parent == null) return null;
-        if (parent instanceof RecyclerView && !(parent instanceof BorderRecyclerView)) {
-            return parent;
-        } else if (parent instanceof View) {
-            return findViewParentIfNeeds((View) parent);
-        } else {
-            return parent;
+    companion object {
+        private fun findViewParentIfNeeds(v: View): ViewParent? {
+            val parent = v.getParent()
+            if (parent == null) return null
+            if (parent is RecyclerView && parent !is BorderRecyclerView) {
+                return parent
+            } else if (parent is View) {
+                return findViewParentIfNeeds(parent as View)
+            } else {
+                return parent
+            }
         }
     }
 }

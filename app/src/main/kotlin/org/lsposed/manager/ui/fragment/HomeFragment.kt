@@ -16,301 +16,396 @@
  *
  * Copyright (C) 2021 LSPosed Contributors-->
  */
+package org.lsposed.manager.ui.fragment
 
-package org.lsposed.manager.ui.fragment;
+import android.app.Activity
+import android.app.Dialog
+import android.os.Build
+import android.os.Bundle
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
+import android.text.method.LinkMovementMethod
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
+import android.view.View
+import android.view.ViewGroup
+import androidx.core.text.HtmlCompat
+import androidx.core.view.MenuProvider
+import androidx.fragment.app.DialogFragment
+import org.lsposed.lspd.ILSPManagerService
+import org.lsposed.manager.BuildConfig
+import org.lsposed.manager.ConfigManager
+import org.lsposed.manager.R
+import org.lsposed.manager.databinding.DialogAboutBinding
+import org.lsposed.manager.databinding.FragmentHomeBinding
+import org.lsposed.manager.ui.dialog.BlurBehindDialogBuilder
+import org.lsposed.manager.ui.dialog.FlashDialogBuilder
+import org.lsposed.manager.ui.dialog.WelcomeDialog.Companion.showIfNeed
+import org.lsposed.manager.util.NavUtil
+import org.lsposed.manager.util.UpdateUtil
+import org.lsposed.manager.util.chrome.LinkTransformationMethod
+import rikka.core.util.ClipboardUtils
+import rikka.material.app.LocaleDelegate
+import rikka.widget.borderview.BorderView.OnBorderVisibilityChangedListener
+import java.io.IOException
+import java.lang.String.format
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.function.Consumer
 
-import android.app.Activity;
-import android.app.Dialog;
-import android.os.Build;
-import android.os.Bundle;
-import android.system.ErrnoException;
-import android.system.Os;
-import android.system.OsConstants;
-import android.text.method.LinkMovementMethod;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup;
+class HomeFragment : BaseFragment(), MenuProvider {
+    private var binding: FragmentHomeBinding? = null
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.core.text.HtmlCompat;
-import androidx.core.view.MenuProvider;
-import androidx.fragment.app.DialogFragment;
-
-import org.lsposed.lspd.ILSPManagerService;
-import org.lsposed.manager.BuildConfig;
-import org.lsposed.manager.ConfigManager;
-import org.lsposed.manager.R;
-import org.lsposed.manager.databinding.DialogAboutBinding;
-import org.lsposed.manager.databinding.FragmentHomeBinding;
-import org.lsposed.manager.ui.dialog.BlurBehindDialogBuilder;
-import org.lsposed.manager.ui.dialog.FlashDialogBuilder;
-import org.lsposed.manager.ui.dialog.WelcomeDialog;
-import org.lsposed.manager.util.NavUtil;
-import org.lsposed.manager.util.UpdateUtil;
-import org.lsposed.manager.util.chrome.LinkTransformationMethod;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import rikka.core.util.ClipboardUtils;
-import rikka.material.app.LocaleDelegate;
-
-public class HomeFragment extends BaseFragment implements MenuProvider {
-    private FragmentHomeBinding binding;
-
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        WelcomeDialog.showIfNeed(getChildFragmentManager());
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        showIfNeed(getChildFragmentManager())
     }
 
-    @Override
-    public void onPrepareMenu(Menu menu) {
-        menu.findItem(R.id.menu_about).setOnMenuItemClickListener(v -> {
-            showAbout();
-            return true;
-        });
-        menu.findItem(R.id.menu_issue).setOnMenuItemClickListener(v -> {
-            NavUtil.startURL(requireActivity(), "https://github.com/JingMatrix/LSPosed/issues/new/choose");
-            return true;
-        });
+    override fun onPrepareMenu(menu: Menu) {
+        menu.findItem(R.id.menu_about)
+            .setOnMenuItemClickListener(MenuItem.OnMenuItemClickListener { v: MenuItem? ->
+                showAbout()
+                true
+            })
+        menu.findItem(R.id.menu_issue)
+            .setOnMenuItemClickListener(MenuItem.OnMenuItemClickListener { v: MenuItem? ->
+                NavUtil.startURL(
+                    requireActivity(),
+                    "https://github.com/JingMatrix/LSPosed/issues/new/choose"
+                )
+                true
+            })
     }
 
-    @Override
-    public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
-
+    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
     }
 
-    @Override
-    public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
-        return false;
+    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+        return false
     }
 
-    @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        binding = FragmentHomeBinding.inflate(inflater, container, false);
-        setupToolbar(binding.toolbar, binding.clickView, R.string.app_name, R.menu.menu_home);
-        binding.toolbar.setNavigationIcon(null);
-        binding.toolbar.setOnClickListener(v -> showAbout());
-        binding.clickView.setOnClickListener(v -> showAbout());
-        binding.appBar.setLiftable(true);
-        binding.nestedScrollView.getBorderViewDelegate().setBorderVisibilityChangedListener((top, oldTop, bottom, oldBottom) -> binding.appBar.setLifted(!top));
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        binding = FragmentHomeBinding.inflate(inflater, container, false)
+        setupToolbar(binding!!.toolbar, binding!!.clickView, R.string.app_name, R.menu.menu_home)
+        binding!!.toolbar.setNavigationIcon(null)
+        binding!!.toolbar.setOnClickListener(View.OnClickListener { v: View? -> showAbout() })
+        binding!!.clickView.setOnClickListener(View.OnClickListener { v: View? -> showAbout() })
+        binding!!.appBar.setLiftable(true)
+        binding!!.nestedScrollView.getBorderViewDelegate()
+            .setBorderVisibilityChangedListener(OnBorderVisibilityChangedListener { top: Boolean, oldTop: Boolean, bottom: Boolean, oldBottom: Boolean ->
+                binding!!.appBar.setLifted(!top)
+            })
 
-        updateStates(requireActivity(), ConfigManager.isBinderAlive(), UpdateUtil.needUpdate());
+        updateStates(requireActivity(), ConfigManager.isBinderAlive, UpdateUtil.needUpdate())
 
-        return binding.getRoot();
+        return binding!!.getRoot()
     }
 
-    private void updateStates(Activity activity, boolean binderAlive, boolean needUpdate) {
+    private fun updateStates(activity: Activity, binderAlive: Boolean, needUpdate: Boolean) {
         if (binderAlive) {
             if (needUpdate) {
-                binding.updateTitle.setText(R.string.need_update);
-                binding.updateSummary.setText(getString(R.string.please_update_summary));
-                binding.statusIcon.setImageResource(R.drawable.ic_round_update_24);
-                binding.updateBtn.setOnClickListener(v -> {
+                binding!!.updateTitle.setText(R.string.need_update)
+                binding!!.updateSummary.setText(getString(R.string.please_update_summary))
+                binding!!.statusIcon.setImageResource(R.drawable.ic_round_update_24)
+                binding!!.updateBtn.setOnClickListener(View.OnClickListener { v: View? ->
                     if (UpdateUtil.canInstall()) {
-                        new FlashDialogBuilder(activity, null).show();
+                        FlashDialogBuilder(activity, null).show()
                     } else {
-                        NavUtil.startURL(activity, getString(R.string.latest_url));
+                        NavUtil.startURL(activity, getString(R.string.latest_url))
                     }
-                });
-                binding.updateCard.setVisibility(View.VISIBLE);
+                })
+                binding!!.updateCard.setVisibility(View.VISIBLE)
             } else {
-                binding.updateCard.setVisibility(View.GONE);
+                binding!!.updateCard.setVisibility(View.GONE)
             }
-            boolean dex2oatAbnormal = ConfigManager.getDex2OatWrapperCompatibility() != ILSPManagerService.DEX2OAT_OK && !ConfigManager.dex2oatFlagsLoaded();
-            var sepolicyAbnormal = !ConfigManager.isSepolicyLoaded();
-            var systemServerAbnormal = !ConfigManager.systemServerRequested();
+            val dex2oatAbnormal =
+                ConfigManager.dex2OatWrapperCompatibility != ILSPManagerService.DEX2OAT_OK && !ConfigManager.dex2oatFlagsLoaded()
+            val sepolicyAbnormal = !ConfigManager.isSepolicyLoaded
+            val systemServerAbnormal = !ConfigManager.systemServerRequested()
             if (sepolicyAbnormal || systemServerAbnormal || dex2oatAbnormal) {
-                binding.statusTitle.setText(R.string.partial_activated);
-                binding.statusIcon.setImageResource(R.drawable.ic_round_warning_24);
-                binding.warningCard.setVisibility(View.VISIBLE);
+                binding!!.statusTitle.setText(R.string.partial_activated)
+                binding!!.statusIcon.setImageResource(R.drawable.ic_round_warning_24)
+                binding!!.warningCard.setVisibility(View.VISIBLE)
                 if (sepolicyAbnormal) {
-                    binding.warningTitle.setText(R.string.selinux_policy_not_loaded_summary);
-                    binding.warningSummary.setText(HtmlCompat.fromHtml(getString(R.string.selinux_policy_not_loaded), HtmlCompat.FROM_HTML_MODE_LEGACY));
+                    binding!!.warningTitle.setText(R.string.selinux_policy_not_loaded_summary)
+                    binding!!.warningSummary.setText(
+                        HtmlCompat.fromHtml(
+                            getString(R.string.selinux_policy_not_loaded),
+                            HtmlCompat.FROM_HTML_MODE_LEGACY
+                        )
+                    )
                 }
                 if (systemServerAbnormal) {
-                    binding.warningTitle.setText(R.string.system_inject_fail_summary);
-                    binding.warningSummary.setText(HtmlCompat.fromHtml(getString(R.string.system_inject_fail), HtmlCompat.FROM_HTML_MODE_LEGACY));
+                    binding!!.warningTitle.setText(R.string.system_inject_fail_summary)
+                    binding!!.warningSummary.setText(
+                        HtmlCompat.fromHtml(
+                            getString(R.string.system_inject_fail),
+                            HtmlCompat.FROM_HTML_MODE_LEGACY
+                        )
+                    )
                 }
                 if (dex2oatAbnormal) {
-                    binding.warningTitle.setText(R.string.system_prop_incorrect_summary);
-                    binding.warningSummary.setText(HtmlCompat.fromHtml(getString(R.string.system_prop_incorrect), HtmlCompat.FROM_HTML_MODE_LEGACY));
+                    binding!!.warningTitle.setText(R.string.system_prop_incorrect_summary)
+                    binding!!.warningSummary.setText(
+                        HtmlCompat.fromHtml(
+                            getString(R.string.system_prop_incorrect),
+                            HtmlCompat.FROM_HTML_MODE_LEGACY
+                        )
+                    )
                 }
             } else {
-                binding.warningCard.setVisibility(View.GONE);
-                binding.statusTitle.setText(R.string.activated);
-                binding.statusIcon.setImageResource(R.drawable.ic_round_check_circle_24);
+                binding!!.warningCard.setVisibility(View.GONE)
+                binding!!.statusTitle.setText(R.string.activated)
+                binding!!.statusIcon.setImageResource(R.drawable.ic_round_check_circle_24)
             }
-            binding.statusSummary.setText(String.format(LocaleDelegate.getDefaultLocale(), "%s (%d) - %s",
-                    ConfigManager.getXposedVersionName(), ConfigManager.getXposedVersionCode(), ConfigManager.getApi()));
-            binding.developerWarningCard.setVisibility(isDeveloper() ? View.VISIBLE : View.GONE);
+            binding!!.statusSummary.setText(
+                format(
+                    LocaleDelegate.defaultLocale,
+                    "%s (%d) - %s",
+                    ConfigManager.xposedVersionName,
+                    ConfigManager.xposedVersionCode,
+                    ConfigManager.api
+                )
+            )
+            binding!!.developerWarningCard.setVisibility(if (this.isDeveloper) View.VISIBLE else View.GONE)
         } else {
-            boolean isMagiskInstalled = ConfigManager.isMagiskInstalled();
+            val isMagiskInstalled = ConfigManager.isMagiskInstalled
             if (isMagiskInstalled) {
-                binding.updateTitle.setText(R.string.install);
-                binding.updateSummary.setText(R.string.install_summary);
-                binding.statusIcon.setImageResource(R.drawable.ic_round_error_outline_24);
-                binding.updateBtn.setOnClickListener(v -> {
+                binding!!.updateTitle.setText(R.string.install)
+                binding!!.updateSummary.setText(R.string.install_summary)
+                binding!!.statusIcon.setImageResource(R.drawable.ic_round_error_outline_24)
+                binding!!.updateBtn.setOnClickListener(View.OnClickListener { v: View? ->
                     if (UpdateUtil.canInstall()) {
-                        new FlashDialogBuilder(activity, null).show();
+                        FlashDialogBuilder(activity, null).show()
                     } else {
-                        NavUtil.startURL(activity, getString(R.string.install_url));
+                        NavUtil.startURL(activity, getString(R.string.install_url))
                     }
-                });
-                binding.updateCard.setVisibility(View.VISIBLE);
+                })
+                binding!!.updateCard.setVisibility(View.VISIBLE)
             } else {
-                binding.updateCard.setVisibility(View.GONE);
+                binding!!.updateCard.setVisibility(View.GONE)
             }
-            binding.warningCard.setVisibility(View.GONE);
-            binding.statusTitle.setText(R.string.not_installed);
-            binding.statusSummary.setText(R.string.not_install_summary);
+            binding!!.warningCard.setVisibility(View.GONE)
+            binding!!.statusTitle.setText(R.string.not_installed)
+            binding!!.statusSummary.setText(R.string.not_install_summary)
         }
 
-        if (ConfigManager.isBinderAlive()) {
-            binding.apiVersion.setText(String.valueOf(ConfigManager.getXposedApiVersion()));
-            binding.api.setText(ConfigManager.isDexObfuscateEnabled() ? R.string.enabled : R.string.not_enabled);
-            binding.frameworkVersion.setText(String.format(LocaleDelegate.getDefaultLocale(), "%1$s (%2$d)", ConfigManager.getXposedVersionName(), ConfigManager.getXposedVersionCode()));
-            binding.managerPackageName.setText(activity.getPackageName());
+        if (ConfigManager.isBinderAlive) {
+            binding!!.apiVersion.setText(ConfigManager.xposedApiVersion.toString())
+            binding!!.api.setText(if (ConfigManager.isDexObfuscateEnabled) R.string.enabled else R.string.not_enabled)
+            binding!!.frameworkVersion.setText(
+                format(
+                    LocaleDelegate.defaultLocale,
+                    "%1\$s (%2\$d)",
+                    ConfigManager.xposedVersionName,
+                    ConfigManager.xposedVersionCode
+                )
+            )
+            binding!!.managerPackageName.setText(activity.getPackageName())
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                binding.dex2oatWrapper.setText(String.format(LocaleDelegate.getDefaultLocale(), "%s (%s)", getString(R.string.unsupported), getString(R.string.android_version_unsatisfied)));
-            } else switch (ConfigManager.getDex2OatWrapperCompatibility()) {
-                case ILSPManagerService.DEX2OAT_OK ->
-                        binding.dex2oatWrapper.setText(R.string.supported);
-                case ILSPManagerService.DEX2OAT_CRASHED ->
-                        binding.dex2oatWrapper.setText(String.format(LocaleDelegate.getDefaultLocale(), "%s (%s)", getString(R.string.unsupported), getString(R.string.crashed)));
-                case ILSPManagerService.DEX2OAT_MOUNT_FAILED ->
-                        binding.dex2oatWrapper.setText(String.format(LocaleDelegate.getDefaultLocale(), "%s (%s)", getString(R.string.unsupported), getString(R.string.mount_failed)));
-                case ILSPManagerService.DEX2OAT_SELINUX_PERMISSIVE ->
-                        binding.dex2oatWrapper.setText(String.format(LocaleDelegate.getDefaultLocale(), "%s (%s)", getString(R.string.unsupported), getString(R.string.selinux_permissive)));
-                case ILSPManagerService.DEX2OAT_SEPOLICY_INCORRECT ->
-                        binding.dex2oatWrapper.setText(String.format(LocaleDelegate.getDefaultLocale(), "%s (%s)", getString(R.string.unsupported), getString(R.string.sepolicy_incorrect)));
+                binding!!.dex2oatWrapper.setText(
+                    format(
+                        LocaleDelegate.defaultLocale,
+                        "%s (%s)",
+                        getString(R.string.unsupported),
+                        getString(R.string.android_version_unsatisfied)
+                    )
+                )
+            } else when (ConfigManager.dex2OatWrapperCompatibility) {
+                ILSPManagerService.DEX2OAT_OK -> binding!!.dex2oatWrapper.setText(R.string.supported)
+                ILSPManagerService.DEX2OAT_CRASHED -> binding!!.dex2oatWrapper.setText(
+                    format(
+                        LocaleDelegate.defaultLocale,
+                        "%s (%s)",
+                        getString(R.string.unsupported),
+                        getString(R.string.crashed)
+                    )
+                )
+
+                ILSPManagerService.DEX2OAT_MOUNT_FAILED -> binding!!.dex2oatWrapper.setText(
+                    format(
+                        LocaleDelegate.defaultLocale,
+                        "%s (%s)",
+                        getString(R.string.unsupported),
+                        getString(R.string.mount_failed)
+                    )
+                )
+
+                ILSPManagerService.DEX2OAT_SELINUX_PERMISSIVE -> binding!!.dex2oatWrapper.setText(
+                    format(
+                        LocaleDelegate.defaultLocale,
+                        "%s (%s)",
+                        getString(R.string.unsupported),
+                        getString(R.string.selinux_permissive)
+                    )
+                )
+
+                ILSPManagerService.DEX2OAT_SEPOLICY_INCORRECT -> binding!!.dex2oatWrapper.setText(
+                    format(
+                        LocaleDelegate.defaultLocale,
+                        "%s (%s)",
+                        getString(R.string.unsupported),
+                        getString(R.string.sepolicy_incorrect)
+                    )
+                )
             }
         } else {
-            binding.apiVersion.setText(R.string.not_installed);
-            binding.api.setText(R.string.not_installed);
-            binding.frameworkVersion.setText(R.string.not_installed);
-            binding.managerPackageName.setText(activity.getPackageName());
+            binding!!.apiVersion.setText(R.string.not_installed)
+            binding!!.api.setText(R.string.not_installed)
+            binding!!.frameworkVersion.setText(R.string.not_installed)
+            binding!!.managerPackageName.setText(activity.getPackageName())
         }
 
         if (Build.VERSION.PREVIEW_SDK_INT != 0) {
-            binding.systemVersion.setText(String.format(LocaleDelegate.getDefaultLocale(), "%1$s Preview (API %2$d)", Build.VERSION.CODENAME, Build.VERSION.SDK_INT));
+            binding!!.systemVersion.setText(
+                format(
+                    LocaleDelegate.defaultLocale,
+                    "%1\$s Preview (API %2\$d)",
+                    Build.VERSION.CODENAME,
+                    Build.VERSION.SDK_INT
+                )
+            )
         } else {
-            binding.systemVersion.setText(String.format(LocaleDelegate.getDefaultLocale(), "%1$s (API %2$d)", Build.VERSION.RELEASE, Build.VERSION.SDK_INT));
+            binding!!.systemVersion.setText(
+                format(
+                    LocaleDelegate.defaultLocale,
+                    "%1\$s (API %2\$d)",
+                    Build.VERSION.RELEASE,
+                    Build.VERSION.SDK_INT
+                )
+            )
         }
 
-        binding.device.setText(getDevice());
-        binding.systemAbi.setText(Build.SUPPORTED_ABIS[0]);
-        String info = activity.getString(R.string.info_api_version) +
+        binding!!.device.setText(this.device)
+        binding!!.systemAbi.setText(Build.SUPPORTED_ABIS[0])
+        val info = activity.getString(R.string.info_api_version) +
                 "\n" +
-                binding.apiVersion.getText() +
+                binding!!.apiVersion.getText() +
                 "\n\n" +
                 activity.getString(R.string.settings_xposed_api_call_protection) +
                 "\n" +
-                binding.api.getText() +
+                binding!!.api.getText() +
                 "\n\n" +
                 activity.getString(R.string.info_dex2oat_wrapper) +
                 "\n" +
-                binding.dex2oatWrapper.getText() +
+                binding!!.dex2oatWrapper.getText() +
                 "\n\n" +
                 activity.getString(R.string.info_framework_version) +
                 "\n" +
-                binding.frameworkVersion.getText() +
+                binding!!.frameworkVersion.getText() +
                 "\n\n" +
                 activity.getString(R.string.info_manager_package_name) +
                 "\n" +
-                binding.managerPackageName.getText() +
+                binding!!.managerPackageName.getText() +
                 "\n\n" +
                 activity.getString(R.string.info_system_version) +
                 "\n" +
-                binding.systemVersion.getText() +
+                binding!!.systemVersion.getText() +
                 "\n\n" +
                 activity.getString(R.string.info_device) +
                 "\n" +
-                binding.device.getText() +
+                binding!!.device.getText() +
                 "\n\n" +
                 activity.getString(R.string.info_system_abi) +
                 "\n" +
-                binding.systemAbi.getText();
-        var map = new HashMap<String, String>();
-        map.put("apiVersion", binding.apiVersion.getText().toString());
-        map.put("api", binding.api.getText().toString());
-        map.put("frameworkVersion", binding.frameworkVersion.getText().toString());
-        map.put("systemAbi", Arrays.toString(Build.SUPPORTED_ABIS));
-        binding.copyInfo.setOnClickListener(v -> {
-            ClipboardUtils.put(activity, info);
-            showHint(R.string.info_copied, false);
-        });
+                binding!!.systemAbi.getText()
+        val map = HashMap<String?, String?>()
+        map.put("apiVersion", binding!!.apiVersion.getText().toString())
+        map.put("api", binding!!.api.getText().toString())
+        map.put("frameworkVersion", binding!!.frameworkVersion.getText().toString())
+        map.put("systemAbi", Build.SUPPORTED_ABIS.contentToString())
+        binding!!.copyInfo.setOnClickListener(View.OnClickListener { v: View? ->
+            ClipboardUtils.put(activity, info)
+            showHint(R.string.info_copied, false)
+        })
     }
 
-    private String getDevice() {
-        String manufacturer = Character.toUpperCase(Build.MANUFACTURER.charAt(0)) + Build.MANUFACTURER.substring(1);
-        if (!Build.BRAND.equals(Build.MANUFACTURER)) {
-            manufacturer += " " + Character.toUpperCase(Build.BRAND.charAt(0)) + Build.BRAND.substring(1);
+    private val device: String
+        get() {
+            var manufacturer = Build.MANUFACTURER.get(0).uppercaseChar()
+                .toString() + Build.MANUFACTURER.substring(1)
+            if (Build.BRAND != Build.MANUFACTURER) {
+                manufacturer += " " + Build.BRAND.get(0)
+                    .uppercaseChar() + Build.BRAND.substring(1)
+            }
+            manufacturer += " " + Build.MODEL + " "
+            return manufacturer
         }
-        manufacturer += " " + Build.MODEL + " ";
-        return manufacturer;
-    }
 
-    private boolean isDeveloper() {
-        var developer = new AtomicBoolean(false);
-        var pids = Paths.get("/data/local/tmp/.studio/ipids");
-        try (var dir = Files.list(pids)) {
-            dir.findFirst().ifPresent(name -> {
-                var pid = Integer.parseInt(name.getFileName().toString());
-                try {
-                    Os.kill(pid, 0);
-                    developer.set(true);
-                } catch (ErrnoException e) {
-                    if (e.errno == OsConstants.ESRCH) {
-                        try {
-                            Files.delete(name);
-                        } catch (IOException ignored) {
-                        }
-                    } else {
-                        developer.set(true);
-                    }
+    private val isDeveloper: Boolean
+        get() {
+            val developer =
+                AtomicBoolean(false)
+            val pids = Paths.get("/data/local/tmp/.studio/ipids")
+            try {
+                Files.list(pids).use { dir ->
+                    dir.findFirst()
+                        .ifPresent(Consumer { name: Path? ->
+                            val pid = name!!.getFileName().toString().toInt()
+                            try {
+                                Os.kill(pid, 0)
+                                developer.set(true)
+                            } catch (e: ErrnoException) {
+                                if (e.errno == OsConstants.ESRCH) {
+                                    try {
+                                        Files.delete(name)
+                                    } catch (ignored: IOException) {
+                                    }
+                                } else {
+                                    developer.set(true)
+                                }
+                            }
+                        })
                 }
-            });
-        } catch (IOException e) {
-            return false;
+            } catch (e: IOException) {
+                return false
+            }
+            return developer.get()
         }
-        return developer.get();
-    }
 
-    public static class AboutDialog extends DialogFragment {
-        @NonNull
-        @Override
-        public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-            DialogAboutBinding binding = DialogAboutBinding.inflate(getLayoutInflater(), null, false);
-            binding.designAboutTitle.setText(R.string.app_name);
-            binding.designAboutInfo.setMovementMethod(LinkMovementMethod.getInstance());
-            binding.designAboutInfo.setTransformationMethod(new LinkTransformationMethod(requireActivity()));
-            binding.designAboutInfo.setText(HtmlCompat.fromHtml(getString(
-                    R.string.about_view_source_code,
-                    "<b><a href=\"https://github.com/JingMatrix/LSPosed\">GitHub</a></b>",
-                    "<b><a href=\"https://t.me/LSPosed\">Telegram</a></b>"), HtmlCompat.FROM_HTML_MODE_LEGACY));
-            binding.designAboutVersion.setText(String.format(LocaleDelegate.getDefaultLocale(), "%s (%d)", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE));
-            return new BlurBehindDialogBuilder(requireContext())
-                    .setView(binding.getRoot()).create();
+    class AboutDialog : DialogFragment() {
+        override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+            val binding = DialogAboutBinding.inflate(getLayoutInflater(), null, false)
+            binding.designAboutTitle.setText(R.string.app_name)
+            binding.designAboutInfo.setMovementMethod(LinkMovementMethod.getInstance())
+            binding.designAboutInfo.setTransformationMethod(LinkTransformationMethod(requireActivity()))
+            binding.designAboutInfo.setText(
+                HtmlCompat.fromHtml(
+                    getString(
+                        R.string.about_view_source_code,
+                        "<b><a href=\"https://github.com/JingMatrix/LSPosed\">GitHub</a></b>",
+                        "<b><a href=\"https://t.me/LSPosed\">Telegram</a></b>"
+                    ), HtmlCompat.FROM_HTML_MODE_LEGACY
+                )
+            )
+            binding.designAboutVersion.setText(
+                format(
+                    LocaleDelegate.defaultLocale,
+                    "%s (%d)",
+                    BuildConfig.VERSION_NAME,
+                    BuildConfig.VERSION_CODE
+                )
+            )
+            return BlurBehindDialogBuilder(requireContext())
+                .setView(binding.getRoot()).create()
         }
     }
 
-    private void showAbout() {
-        new AboutDialog().show(getChildFragmentManager(), "about");
+    private fun showAbout() {
+        AboutDialog().show(getChildFragmentManager(), "about")
     }
 
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        binding = null;
+    override fun onDestroyView() {
+        super.onDestroyView()
+        binding = null
     }
 }

@@ -17,386 +17,429 @@
  * Copyright (C) 2021 LSPosed Contributors-->
  */
 
-package org.lsposed.manager.ui.fragment;
+package org.lsposed.manager.ui.fragment
 
-import android.content.ActivityNotFoundException;
-import android.content.Context;
-import android.os.Build;
-import android.os.Bundle;
-import android.provider.Settings;
-import android.text.TextUtils;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.graphics.Color
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import android.text.TextUtils
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.EdgeEffect
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.text.HtmlCompat
+import androidx.preference.Preference
+import androidx.preference.PreferenceFragmentCompat
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.color.DynamicColors
+import org.lsposed.manager.App
+import org.lsposed.manager.BuildConfig
+import org.lsposed.manager.ConfigManager
+import org.lsposed.manager.R
+import org.lsposed.manager.databinding.FragmentSettingsBinding
+import org.lsposed.manager.repo.RepoLoader
+import org.lsposed.manager.ui.activity.MainActivity
+import org.lsposed.manager.util.*
+import rikka.core.util.ResourceUtils
+import rikka.material.app.LocaleDelegate
+import rikka.material.preference.MaterialSwitchPreference
+import rikka.preference.SimpleMenuPreference
+import rikka.widget.borderview.BorderRecyclerView
+import java.time.LocalDateTime
+import java.util.*
+import androidx.core.content.edit
+import org.lsposed.manager.util.BackupUtils
+import org.lsposed.manager.util.CloudflareDNS
+import org.lsposed.manager.util.NavUtil
+import org.lsposed.manager.util.ShortcutUtil
+import org.lsposed.manager.util.ThemeUtil
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatDelegate;
-import androidx.core.text.HtmlCompat;
-import androidx.preference.Preference;
-import androidx.preference.PreferenceFragmentCompat;
-import androidx.recyclerview.widget.RecyclerView;
+class SettingsFragment : BaseFragment() {
+    private var binding: FragmentSettingsBinding? = null
 
-import com.google.android.material.color.DynamicColors;
-
-import org.lsposed.manager.App;
-import org.lsposed.manager.BuildConfig;
-import org.lsposed.manager.ConfigManager;
-import org.lsposed.manager.R;
-import org.lsposed.manager.databinding.FragmentSettingsBinding;
-import org.lsposed.manager.repo.RepoLoader;
-import org.lsposed.manager.ui.activity.MainActivity;
-import org.lsposed.manager.util.BackupUtils;
-import org.lsposed.manager.util.CloudflareDNS;
-import org.lsposed.manager.util.LangList;
-import org.lsposed.manager.util.NavUtil;
-import org.lsposed.manager.util.ShortcutUtil;
-import org.lsposed.manager.util.ThemeUtil;
-
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Locale;
-
-import rikka.core.util.ResourceUtils;
-import rikka.material.app.LocaleDelegate;
-import rikka.material.preference.MaterialSwitchPreference;
-import rikka.preference.SimpleMenuPreference;
-import rikka.recyclerview.RecyclerViewKt;
-import rikka.widget.borderview.BorderRecyclerView;
-
-public class SettingsFragment extends BaseFragment {
-    FragmentSettingsBinding binding;
-
-    @Nullable
-    @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        binding = FragmentSettingsBinding.inflate(inflater, container, false);
-        binding.appBar.setLiftable(true);
-        setupToolbar(binding.toolbar, binding.clickView, R.string.Settings);
-        binding.toolbar.setNavigationIcon(null);
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        binding = FragmentSettingsBinding.inflate(inflater, container, false)
+        binding?.appBar?.setLiftable(true)
+        setupToolbar(binding?.toolbar, binding?.clickView, R.string.Settings)
+        binding?.toolbar?.setNavigationIcon(null)
         if (savedInstanceState == null) {
-            getChildFragmentManager().beginTransaction().add(R.id.setting_container, new PreferenceFragment()).commitNow();
+            childFragmentManager.beginTransaction().add(R.id.setting_container, PreferenceFragment()).commitNow()
         }
-        if (ConfigManager.isBinderAlive()) {
-            binding.toolbar.setSubtitle(String.format(LocaleDelegate.getDefaultLocale(), "%s (%d) - %s", ConfigManager.getXposedVersionName(), ConfigManager.getXposedVersionCode(), ConfigManager.getApi()));
+        if (ConfigManager.isBinderAlive) {
+            binding?.toolbar?.subtitle = String.format(
+                LocaleDelegate.defaultLocale,
+                "%s (%d) - %s",
+                ConfigManager.xposedVersionName,
+                ConfigManager.xposedVersionCode,
+                ConfigManager.api
+            )
         } else {
-            binding.toolbar.setSubtitle(String.format(LocaleDelegate.getDefaultLocale(), "%s (%d) - %s", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, getString(R.string.not_installed)));
+            binding?.toolbar?.subtitle = String.format(
+                LocaleDelegate.defaultLocale,
+                "%s (%d) - %s",
+                BuildConfig.VERSION_NAME,
+                BuildConfig.VERSION_CODE,
+                getString(R.string.not_installed)
+            )
         }
-        return binding.getRoot();
+        return binding?.root
     }
 
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-
-        binding = null;
+    override fun onDestroyView() {
+        super.onDestroyView()
+        binding = null
     }
 
-    public static class PreferenceFragment extends PreferenceFragmentCompat {
-        private SettingsFragment parentFragment;
+    class PreferenceFragment : PreferenceFragmentCompat() {
+        private var parentFragment: SettingsFragment? = null
 
-        ActivityResultLauncher<String> backupLauncher = registerForActivityResult(new ActivityResultContracts.CreateDocument("application/gzip"), uri -> {
-            if (uri == null || parentFragment == null) return;
-            parentFragment.runAsync(() -> {
-                try {
-                    BackupUtils.backup(uri);
-                } catch (Exception e) {
-                    var text = App.getInstance().getString(R.string.settings_backup_failed2, e.getMessage());
-                    parentFragment.showHint(text, false);
+        private val backupLauncher: ActivityResultLauncher<String> =
+            registerForActivityResult(ActivityResultContracts.CreateDocument("application/gzip")) { uri ->
+                if (uri == null || parentFragment == null) return@registerForActivityResult
+                parentFragment?.runAsync {
+                    try {
+                        BackupUtils.backup(uri)
+                    } catch (e: Exception) {
+                        val text = App.instance?.getString(R.string.settings_backup_failed2, e.message)
+                        parentFragment?.showHint(text.toString(), false)
+                    }
                 }
-            });
-        });
-        ActivityResultLauncher<String[]> restoreLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
-            if (uri == null || parentFragment == null) return;
-            parentFragment.runAsync(() -> {
-                try {
-                    BackupUtils.restore(uri);
-                } catch (Exception e) {
-                    var text = App.getInstance().getString(R.string.settings_restore_failed2, e.getMessage());
-                    parentFragment.showHint(text, false);
-                }
-            });
-        });
-
-        @Override
-        public void onAttach(@NonNull Context context) {
-            super.onAttach(context);
-
-            parentFragment = (SettingsFragment) requireParentFragment();
-        }
-
-        @Override
-        public void onDetach() {
-            super.onDetach();
-
-            parentFragment = null;
-        }
-
-        private boolean setNotificationPreferenceEnabled(MaterialSwitchPreference notificationPreference, boolean preferenceEnabled) {
-            var notificationEnabled = ConfigManager.enableStatusNotification();
-            if (notificationPreference != null) {
-                notificationPreference.setEnabled(!notificationEnabled || preferenceEnabled);
-                notificationPreference.setSummaryOn(preferenceEnabled ?
-                        notificationPreference.getContext().getString(R.string.settings_enable_status_notification_summary) :
-                        notificationPreference.getContext().getString(R.string.settings_enable_status_notification_summary) + "\n" +
-                                notificationPreference.getContext().getString(R.string.disable_status_notification_error));
             }
-            return notificationEnabled;
+
+        private val restoreLauncher: ActivityResultLauncher<Array<String>> =
+            registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                if (uri == null || parentFragment == null) return@registerForActivityResult
+                parentFragment?.runAsync {
+                    try {
+                        BackupUtils.restore(uri)
+                    } catch (e: Exception) {
+                        val text = App.instance?.getString(R.string.settings_restore_failed2, e.message)
+                        parentFragment?.showHint(text.toString(), false)
+                    }
+                }
+            }
+
+        override fun onAttach(context: Context) {
+            super.onAttach(context)
+            parentFragment = requireParentFragment() as SettingsFragment
         }
 
-        @Override
-        public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
-            final String SYSTEM = "SYSTEM";
+        override fun onDetach() {
+            super.onDetach()
+            parentFragment = null
+        }
 
-            addPreferencesFromResource(R.xml.prefs);
+        private fun setNotificationPreferenceEnabled(
+            notificationPreference: MaterialSwitchPreference?,
+            preferenceEnabled: Boolean
+        ): Boolean {
+            val notificationEnabled = ConfigManager.enableStatusNotification()
+            if (notificationPreference != null) {
+                notificationPreference.isEnabled = !notificationEnabled || preferenceEnabled
+                notificationPreference.summaryOn = if (preferenceEnabled) {
+                    notificationPreference.context.getString(R.string.settings_enable_status_notification_summary)
+                } else {
+                    notificationPreference.context.getString(R.string.settings_enable_status_notification_summary) + "\n" +
+                            notificationPreference.context.getString(R.string.disable_status_notification_error)
+                }
+            }
+            return notificationEnabled
+        }
 
-            boolean installed = ConfigManager.isBinderAlive();
-            MaterialSwitchPreference prefVerboseLogs = findPreference("disable_verbose_log");
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            val SYSTEM = "SYSTEM"
+
+            addPreferencesFromResource(R.xml.prefs)
+
+            val installed = ConfigManager.isBinderAlive
+            val prefVerboseLogs: MaterialSwitchPreference? = findPreference("disable_verbose_log")
             if (prefVerboseLogs != null) {
-                prefVerboseLogs.setEnabled(!BuildConfig.DEBUG && installed);
-                if (BuildConfig.DEBUG) ConfigManager.setVerboseLogEnabled(false);
-                prefVerboseLogs.setChecked(!installed || !ConfigManager.isVerboseLogEnabled());
-                prefVerboseLogs.setOnPreferenceChangeListener((preference, newValue) -> ConfigManager.setVerboseLogEnabled(!(boolean) newValue));
+                prefVerboseLogs.isEnabled = !BuildConfig.DEBUG && installed
+                if (BuildConfig.DEBUG) ConfigManager.setVerboseLogEnabled(false)
+                prefVerboseLogs.isChecked = !installed || ConfigManager.isVerboseLogEnabled
+                prefVerboseLogs.setOnPreferenceChangeListener { _, newValue ->
+                    ConfigManager.setVerboseLogEnabled(!(newValue as Boolean))
+                }
             }
 
-            MaterialSwitchPreference prefLogWatchDog = findPreference("enable_log_watchdog");
+            val prefLogWatchDog: MaterialSwitchPreference? = findPreference("enable_log_watchdog")
             if (prefLogWatchDog != null) {
-                prefLogWatchDog.setEnabled(!BuildConfig.DEBUG && installed);
-                if (BuildConfig.DEBUG) ConfigManager.setLogWatchdog(true);
-                prefLogWatchDog.setChecked(!installed || ConfigManager.isLogWatchdogEnabled());
-                prefLogWatchDog.setOnPreferenceChangeListener((preference, newValue) -> ConfigManager.setLogWatchdog((boolean) newValue));
+                prefLogWatchDog.isEnabled = !BuildConfig.DEBUG && installed
+                if (BuildConfig.DEBUG) ConfigManager.setLogWatchdog(true)
+                prefLogWatchDog.isChecked = !installed || ConfigManager.isLogWatchdogEnabled
+                prefLogWatchDog.setOnPreferenceChangeListener { _, newValue ->
+                    ConfigManager.setLogWatchdog(newValue as Boolean)
+                }
             }
 
-            MaterialSwitchPreference prefDexObfuscate = findPreference("enable_dex_obfuscate");
+            val prefDexObfuscate: MaterialSwitchPreference? = findPreference("enable_dex_obfuscate")
             if (prefDexObfuscate != null) {
-                prefDexObfuscate.setEnabled(installed);
-                prefDexObfuscate.setChecked(!installed || ConfigManager.isDexObfuscateEnabled());
-                prefDexObfuscate.setOnPreferenceChangeListener((preference, newValue) -> {
-                    parentFragment.showHint(R.string.reboot_required, true, R.string.reboot, v -> ConfigManager.reboot());
-                    return ConfigManager.setDexObfuscateEnabled((boolean) newValue);
-                });
+                prefDexObfuscate.isEnabled = installed
+                prefDexObfuscate.isChecked = !installed || ConfigManager.isDexObfuscateEnabled
+                prefDexObfuscate.setOnPreferenceChangeListener { _, newValue ->
+                    parentFragment?.showHint(R.string.reboot_required, true, R.string.reboot) {
+                        ConfigManager.reboot()
+                    }
+                    ConfigManager.setDexObfuscateEnabled(newValue as Boolean)
+                }
             }
 
-            MaterialSwitchPreference notificationPreference = findPreference("enable_status_notification");
+            val notificationPreference: MaterialSwitchPreference? = findPreference("enable_status_notification")
             if (notificationPreference != null) {
-                notificationPreference.setVisible(installed);
+                notificationPreference.isVisible = installed
                 if (installed) {
-                    notificationPreference.setChecked(setNotificationPreferenceEnabled(notificationPreference, !App.isParasitic || ShortcutUtil.isLaunchShortcutPinned()));
+                    notificationPreference.isChecked =
+                        setNotificationPreferenceEnabled(notificationPreference, !App.isParasitic || ShortcutUtil.isLaunchShortcutPinned)
                 }
-                notificationPreference.setOnPreferenceChangeListener((p, v) -> {
-                    var succeeded = ConfigManager.setEnableStatusNotification((boolean) v);
-                    if ((boolean) v && App.isParasitic && !ShortcutUtil.isLaunchShortcutPinned()) {
-                        setNotificationPreferenceEnabled(notificationPreference, false);
+                notificationPreference.setOnPreferenceChangeListener { _, v ->
+                    val succeeded = ConfigManager.setEnableStatusNotification(v as Boolean)
+                    if (v && App.isParasitic && !ShortcutUtil.isLaunchShortcutPinned) {
+                        setNotificationPreferenceEnabled(notificationPreference, false)
                     }
-                    return succeeded;
-                });
+                    succeeded
+                }
             }
 
-            Preference shortcut = findPreference("add_shortcut");
+            val shortcut: Preference? = findPreference("add_shortcut")
             if (shortcut != null) {
-                shortcut.setVisible(App.isParasitic);
+                shortcut.isVisible = App.isParasitic
                 if (!ShortcutUtil.isRequestPinShortcutSupported(requireContext())) {
-                    shortcut.setEnabled(false);
-                    shortcut.setSummary(R.string.settings_unsupported_pin_shortcut_summary);
+                    shortcut.isEnabled = false
+                    shortcut.summary = getString(R.string.settings_unsupported_pin_shortcut_summary)
                 }
-                shortcut.setOnPreferenceClickListener(preference -> {
-                    if (!ShortcutUtil.requestPinLaunchShortcut(() -> {
-                        setNotificationPreferenceEnabled(notificationPreference, true);
-                        App.getPreferences().edit().putBoolean("never_show_welcome", true).apply();
-                        parentFragment.showHint(R.string.settings_shortcut_pinned_hint, false);
-                    })) {
-                        parentFragment.showHint(R.string.settings_unsupported_pin_shortcut_summary, true);
+                shortcut.setOnPreferenceClickListener {
+                    if (!ShortcutUtil.requestPinLaunchShortcut {
+                            setNotificationPreferenceEnabled(notificationPreference, true)
+                            App.preferences.edit { putBoolean("never_show_welcome", true) }
+                            parentFragment?.showHint(R.string.settings_shortcut_pinned_hint, false)
+                        }) {
+                        parentFragment?.showHint(R.string.settings_unsupported_pin_shortcut_summary, true)
                     }
-                    return true;
-                });
+                    true
+                }
             }
 
-            Preference backup = findPreference("backup");
+            val backup: Preference? = findPreference("backup")
             if (backup != null) {
-                backup.setEnabled(installed);
-                backup.setOnPreferenceClickListener(preference -> {
-                    LocalDateTime now = LocalDateTime.now();
+                backup.isEnabled = installed
+                backup.setOnPreferenceClickListener {
+                    val now = LocalDateTime.now()
                     try {
-                        backupLauncher.launch(String.format(LocaleDelegate.getDefaultLocale(), "LSPosed_%s.lsp", now.toString()));
-                        return true;
-                    } catch (ActivityNotFoundException e) {
-                        parentFragment.showHint(R.string.enable_documentui, true);
-                        return false;
+                        backupLauncher.launch(String.format(LocaleDelegate.defaultLocale, "LSPosed_%s.lsp", now.toString()))
+                        true
+                    } catch (e: ActivityNotFoundException) {
+                        parentFragment?.showHint(R.string.enable_documentui, true)
+                        false
                     }
-                });
+                }
             }
 
-            Preference restore = findPreference("restore");
+            val restore: Preference? = findPreference("restore")
             if (restore != null) {
-                restore.setEnabled(installed);
-                restore.setOnPreferenceClickListener(preference -> {
+                restore.isEnabled = installed
+                restore.setOnPreferenceClickListener {
                     try {
-                        restoreLauncher.launch(new String[]{"*/*"});
-                        return true;
-                    } catch (ActivityNotFoundException e) {
-                        parentFragment.showHint(R.string.enable_documentui, true);
-                        return false;
+                        restoreLauncher.launch(arrayOf("*/*"))
+                        true
+                    } catch (e: ActivityNotFoundException) {
+                        parentFragment?.showHint(R.string.enable_documentui, true)
+                        false
                     }
-                });
+                }
             }
 
-            Preference theme = findPreference("dark_theme");
+            val theme: Preference? = findPreference("dark_theme")
             if (theme != null) {
-                theme.setOnPreferenceChangeListener((preference, newValue) -> {
-                    if (!App.getPreferences().getString("dark_theme", ThemeUtil.MODE_NIGHT_FOLLOW_SYSTEM).equals(newValue)) {
-                        AppCompatDelegate.setDefaultNightMode(ThemeUtil.getDarkTheme((String) newValue));
+                theme.setOnPreferenceChangeListener { _, newValue ->
+                    if (App.preferences.getString("dark_theme", ThemeUtil.MODE_NIGHT_FOLLOW_SYSTEM) != newValue) {
+                        AppCompatDelegate.setDefaultNightMode(ThemeUtil.getDarkTheme(newValue as String))
                     }
-                    return true;
-                });
+                    true
+                }
             }
 
-            Preference black_dark_theme = findPreference("black_dark_theme");
-            if (black_dark_theme != null) {
-                black_dark_theme.setOnPreferenceChangeListener((preference, newValue) -> {
-                    MainActivity activity = (MainActivity) getActivity();
-                    if (activity != null && ResourceUtils.isNightMode(getResources().getConfiguration())) {
-                        activity.restart();
+            val blackDarkTheme: Preference? = findPreference("black_dark_theme")
+            if (blackDarkTheme != null) {
+                blackDarkTheme.setOnPreferenceChangeListener { _, _ ->
+                    val activity = activity as? MainActivity
+                    if (activity != null && ResourceUtils.isNightMode(resources.configuration)) {
+                        activity.restart()
                     }
-                    return true;
-                });
+                    true
+                }
             }
 
-            Preference primary_color = findPreference("theme_color");
-            if (primary_color != null) {
-                primary_color.setOnPreferenceChangeListener((preference, newValue) -> {
-                    MainActivity activity = (MainActivity) getActivity();
+            val primaryColor: Preference? = findPreference("theme_color")
+            if (primaryColor != null) {
+                primaryColor.setOnPreferenceChangeListener { _, _ ->
+                    val activity = activity as? MainActivity
                     if (activity != null) {
-                        activity.restart();
+                        activity.restart()
                     }
-                    return true;
-                });
+                    true
+                }
             }
 
-            MaterialSwitchPreference prefShowHiddenIcons = findPreference("show_hidden_icon_apps_enabled");
+            val prefShowHiddenIcons: MaterialSwitchPreference? = findPreference("show_hidden_icon_apps_enabled")
             if (prefShowHiddenIcons != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                if (ConfigManager.isBinderAlive()) {
-                    prefShowHiddenIcons.setEnabled(true);
-                    prefShowHiddenIcons.setOnPreferenceChangeListener((preference, newValue) -> ConfigManager.setHiddenIcon(!(boolean) newValue));
+                if (ConfigManager.isBinderAlive) {
+                    prefShowHiddenIcons.isEnabled = true
+                    prefShowHiddenIcons.setOnPreferenceChangeListener { _, newValue ->
+                        ConfigManager.setHiddenIcon(!(newValue as Boolean))
+                    }
                 }
-                prefShowHiddenIcons.setChecked(Settings.Global.getInt(requireActivity().getContentResolver(), "show_hidden_icon_apps_enabled", 1) != 0);
+                prefShowHiddenIcons.isChecked =
+                    Settings.Global.getInt(requireActivity().contentResolver, "show_hidden_icon_apps_enabled", 1) != 0
             }
 
-            MaterialSwitchPreference prefFollowSystemAccent = findPreference("follow_system_accent");
+            val prefFollowSystemAccent: MaterialSwitchPreference? = findPreference("follow_system_accent")
             if (prefFollowSystemAccent != null && DynamicColors.isDynamicColorAvailable()) {
-                if (primary_color != null) {
-                    primary_color.setVisible(!prefFollowSystemAccent.isChecked());
+                if (primaryColor != null) {
+                    primaryColor.isVisible = !prefFollowSystemAccent.isChecked
                 }
-                prefFollowSystemAccent.setVisible(true);
-                prefFollowSystemAccent.setOnPreferenceChangeListener((preference, newValue) -> {
-                    MainActivity activity = (MainActivity) getActivity();
+                prefFollowSystemAccent.isVisible = true
+                prefFollowSystemAccent.setOnPreferenceChangeListener { _, _ ->
+                    val activity = activity as? MainActivity
                     if (activity != null) {
-                        activity.restart();
+                        activity.restart()
                     }
-                    return true;
-                });
+                    true
+                }
             }
 
-            MaterialSwitchPreference prefDoH = findPreference("doh");
+            val prefDoH: MaterialSwitchPreference? = findPreference("doh")
             if (prefDoH != null) {
-                var dns = (CloudflareDNS) App.getOkHttpClient().dns();
+                val dns = App.okHttpClient?.dns as CloudflareDNS
                 if (!dns.noProxy) {
-                    prefDoH.setEnabled(false);
-                    prefDoH.setVisible(false);
-                    var group = prefDoH.getParent();
-                    assert group != null;
-                    group.setVisible(false);
+                    prefDoH.isEnabled = false
+                    prefDoH.isVisible = false
+                    val group = prefDoH.parent
+                    group?.isVisible = false
                 }
-                prefDoH.setOnPreferenceChangeListener((p, v) -> {
-                    dns.DoH = (boolean) v;
-                    return true;
-                });
+                prefDoH.setOnPreferenceChangeListener { _, v ->
+                    dns.DoH = v as Boolean
+                    true
+                }
             }
 
-            SimpleMenuPreference language = findPreference("language");
+            val language: SimpleMenuPreference? = findPreference("language")
             if (language != null) {
-                var tag = language.getValue();
-                var userLocale = App.getLocale();
-                var entries = new ArrayList<CharSequence>();
-                var lstLang = LangList.LOCALES;
-                for (var lang : lstLang) {
-                    if (lang.equals(SYSTEM)) {
-                        entries.add(getString(rikka.core.R.string.follow_system));
-                        continue;
+                val tag = language.value
+                val userLocale = App.getLocale(tag)
+                val entries = ArrayList<CharSequence>()
+                val lstLang = LangList.LOCALES
+                for (lang in lstLang) {
+                    if (lang == SYSTEM) {
+                        entries.add(getString(rikka.core.R.string.follow_system))
+                        continue
                     }
-                    var locale = Locale.forLanguageTag(lang);
-                    entries.add(HtmlCompat.fromHtml(locale.getDisplayName(locale), HtmlCompat.FROM_HTML_MODE_LEGACY));
+                    val locale = Locale.forLanguageTag(lang)
+                    entries.add(HtmlCompat.fromHtml(locale.getDisplayName(locale), HtmlCompat.FROM_HTML_MODE_LEGACY))
                 }
-                language.setEntries(entries.toArray(new CharSequence[0]));
-                language.setEntryValues(lstLang);
-                if (TextUtils.isEmpty(tag) || SYSTEM.equals(tag)) {
-                    language.setSummary(getString(rikka.core.R.string.follow_system));
+                language.entries = entries.toTypedArray()
+                language.entryValues = lstLang
+                if (TextUtils.isEmpty(tag) || SYSTEM == tag) {
+                    language.summary = getString(rikka.core.R.string.follow_system)
                 } else {
-                    var locale = Locale.forLanguageTag(tag);
-                    language.setSummary(!TextUtils.isEmpty(locale.getScript()) ? locale.getDisplayScript(userLocale) : locale.getDisplayName(userLocale));
+                    val locale = Locale.forLanguageTag(tag)
+                    language.summary = if (!TextUtils.isEmpty(locale.script)) locale.getDisplayScript(userLocale) else locale.getDisplayName(userLocale)
                 }
-                language.setOnPreferenceChangeListener((preference, newValue) -> {
-                    var app = App.getInstance();
-                    var locale = App.getLocale((String) newValue);
-                    var res = app.getResources();
-                    var config = res.getConfiguration();
-                    config.setLocale(locale);
-                    LocaleDelegate.setDefaultLocale(locale);
+                language.setOnPreferenceChangeListener { _, newValue ->
+                    val app = App.instance
+                    val locale = App.getLocale(newValue as String)
+                    val res = app?.resources
+                    val config = res?.configuration
+                    config?.setLocale(locale)
+                    LocaleDelegate.defaultLocale
                     //noinspection deprecation
-                    res.updateConfiguration(config, res.getDisplayMetrics());
-                    MainActivity activity = (MainActivity) getActivity();
+                    res?.updateConfiguration(config, res.displayMetrics)
+                    val activity = activity as? MainActivity
                     if (activity != null) {
-                        activity.restart();
+                        activity.restart()
                     }
-                    return true;
-                });
-            }
-
-            Preference translation = findPreference("translation");
-            if (translation != null) {
-                translation.setOnPreferenceClickListener(preference -> {
-                    NavUtil.startURL(requireActivity(), "https://crowdin.com/project/lsposed_jingmatrix");
-                    return true;
-                });
-                translation.setSummary(getString(R.string.settings_translation_summary, getString(R.string.app_name)));
-            }
-
-            Preference translation_contributors = findPreference("translation_contributors");
-            if (translation_contributors != null) {
-                var translators = HtmlCompat.fromHtml(getString(R.string.translators), HtmlCompat.FROM_HTML_MODE_LEGACY);
-                if (translators.toString().equals("null")) {
-                    translation_contributors.setVisible(false);
-                } else {
-                    translation_contributors.setSummary(translators);
+                    true
                 }
             }
-            SimpleMenuPreference channel = findPreference("update_channel");
+
+            val translation: Preference? = findPreference("translation")
+            if (translation != null) {
+                translation.setOnPreferenceClickListener {
+                    NavUtil.startURL(requireActivity(), "https://crowdin.com/project/lsposed_jingmatrix")
+                    true
+                }
+                translation.summary = getString(R.string.settings_translation_summary, getString(R.string.app_name))
+            }
+
+            val translationContributors: Preference? = findPreference("translation_contributors")
+            if (translationContributors != null) {
+                val translators = HtmlCompat.fromHtml(getString(R.string.translators), HtmlCompat.FROM_HTML_MODE_LEGACY)
+                if (translators.toString() == "null") {
+                    translationContributors.isVisible = false
+                } else {
+                    translationContributors.summary = translators
+                }
+            }
+
+            val channel: SimpleMenuPreference? = findPreference("update_channel")
             if (channel != null) {
-                channel.setOnPreferenceChangeListener((preference, newValue) -> {
-                    var repoLoader = RepoLoader.getInstance();
-                    repoLoader.updateLatestVersion(String.valueOf(newValue));
-                    return true;
-                });
+                channel.setOnPreferenceChangeListener { _, newValue ->
+                    val repoLoader = RepoLoader.instance
+                    if (repoLoader != null) {
+                        // 将 newValue 强制转换为 String
+                        val channelValue = newValue as String
+                        // 传递 onlineModules 和 channelValue
+                        repoLoader.updateLatestVersion(repoLoader.onlineModules, channelValue)
+                    }
+                    true
+                }
             }
         }
 
-        @NonNull
-        @Override
-        public RecyclerView onCreateRecyclerView(@NonNull LayoutInflater inflater, @NonNull ViewGroup parent, Bundle savedInstanceState) {
-            BorderRecyclerView recyclerView = (BorderRecyclerView) super.onCreateRecyclerView(inflater, parent, savedInstanceState);
-            RecyclerViewKt.fixEdgeEffect(recyclerView, false, true);
-            recyclerView.getBorderViewDelegate().setBorderVisibilityChangedListener((top, oldTop, bottom, oldBottom) -> parentFragment.binding.appBar.setLifted(!top));
-            var fragment = getParentFragment();
-            if (fragment instanceof SettingsFragment settingsFragment) {
-                View.OnClickListener l = v -> {
-                    settingsFragment.binding.appBar.setExpanded(true, true);
-                    recyclerView.smoothScrollToPosition(0);
-                };
-                settingsFragment.binding.toolbar.setOnClickListener(l);
-                settingsFragment.binding.clickView.setOnClickListener(l);
+        override fun onCreateRecyclerView(
+            inflater: LayoutInflater,
+            parent: ViewGroup,
+            savedInstanceState: Bundle?
+        ): RecyclerView {
+            val recyclerView = super.onCreateRecyclerView(inflater, parent, savedInstanceState) as BorderRecyclerView
+
+            // 自定义边缘效果
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                recyclerView.edgeEffectFactory = object : RecyclerView.EdgeEffectFactory() {
+                    override fun createEdgeEffect(recyclerView: RecyclerView, direction: Int): EdgeEffect {
+                        return EdgeEffect(recyclerView.context).apply {
+                            // 自定义边缘效果的颜色或行为
+                            color = Color.RED // 例如，设置为红色
+                        }
+                    }
+                }
             }
-            return recyclerView;
+
+            recyclerView.borderViewDelegate.setBorderVisibilityChangedListener { top, _, _, _ ->
+                parentFragment?.binding?.appBar?.setLifted(!top)
+            }
+
+            val fragment = parentFragment
+            if (fragment is SettingsFragment) {
+                val l = View.OnClickListener {
+                    fragment.binding?.appBar?.setExpanded(true, true)
+                    recyclerView.smoothScrollToPosition(0)
+                }
+                fragment.binding?.toolbar?.setOnClickListener(l)
+                fragment.binding?.clickView?.setOnClickListener(l)
+            }
+
+            return recyclerView
         }
+
     }
 }

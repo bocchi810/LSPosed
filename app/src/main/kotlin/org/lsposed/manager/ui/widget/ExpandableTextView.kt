@@ -16,158 +16,142 @@
  *
  * Copyright (C) 2021 LSPosed Contributors-->
  */
+package org.lsposed.manager.ui.widget
 
-package org.lsposed.manager.ui.widget;
+import android.annotation.SuppressLint
+import android.content.Context
+import android.graphics.Typeface
+import android.os.Bundle
+import android.os.Parcelable
+import android.text.SpannableString
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.TextPaint
+import android.text.method.LinkMovementMethod
+import android.text.style.ClickableSpan
+import android.transition.TransitionManager
+import android.util.AttributeSet
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
+import com.google.android.material.textview.MaterialTextView
+import org.lsposed.manager.R
 
-import android.annotation.SuppressLint;
-import android.content.Context;
-import android.graphics.Typeface;
-import android.os.Bundle;
-import android.os.Parcelable;
-import android.text.Layout;
-import android.text.SpannableString;
-import android.text.SpannableStringBuilder;
-import android.text.Spanned;
-import android.text.TextPaint;
-import android.text.method.LinkMovementMethod;
-import android.text.style.ClickableSpan;
-import android.transition.TransitionManager;
-import android.util.AttributeSet;
-import android.view.MotionEvent;
-import android.view.View;
-import android.view.ViewGroup;
+class ExpandableTextView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null,
+    defStyle: Int = 0
+) : MaterialTextView(context, attrs, defStyle) {
+    private var text: CharSequence? = null
+    private var nextLines = 0
+    private val maxLines: Int
+    private val collapse: SpannableString
+    private val expand: SpannableString
+    private val sb = SpannableStringBuilder()
+    private var lineCount = 0
 
-import androidx.annotation.NonNull;
-
-import com.google.android.material.textview.MaterialTextView;
-
-import org.lsposed.manager.R;
-
-public class ExpandableTextView extends MaterialTextView {
-    private CharSequence text = null;
-    private int nextLines = 0;
-    private final int maxLines;
-    private final SpannableString collapse;
-    private final SpannableString expand;
-    private final SpannableStringBuilder sb = new SpannableStringBuilder();
-    private int lineCount = 0;
-
-    public ExpandableTextView(Context context) {
-        this(context, null);
-    }
-
-    public ExpandableTextView(Context context, AttributeSet attrs) {
-        this(context, attrs, 0);
-    }
-
-    public ExpandableTextView(Context context, AttributeSet attrs, int defStyle) {
-        super(context, attrs, defStyle);
-        maxLines = getMaxLines();
-        collapse = new SpannableString(context.getString(R.string.collapse));
-        ClickableSpan span = new ClickableSpan() {
-            @Override
-            public void onClick(@NonNull View widget) {
-                TransitionManager.beginDelayedTransition((ViewGroup) getParent());
-                setMaxLines(nextLines);
-                ExpandableTextView.super.setText(text);
+    init {
+        maxLines = getMaxLines()
+        collapse = SpannableString(context.getString(R.string.collapse))
+        val span: ClickableSpan = object : ClickableSpan() {
+            override fun onClick(widget: View) {
+                TransitionManager.beginDelayedTransition(getParent() as ViewGroup?)
+                setMaxLines(nextLines)
+                super@ExpandableTextView.setText(text)
             }
 
-            @Override
-            public void updateDrawState(@NonNull TextPaint ds) {
-                ds.setTypeface(Typeface.DEFAULT_BOLD);
+            override fun updateDrawState(ds: TextPaint) {
+                ds.setTypeface(Typeface.DEFAULT_BOLD)
             }
-        };
-        collapse.setSpan(span, 0, collapse.length(), 0);
-        expand = new SpannableString(context.getString(R.string.expand));
-        expand.setSpan(span, 0, expand.length(), 0);
-        setMovementMethod(LinkMovementMethod.getInstance());
+        }
+        collapse.setSpan(span, 0, collapse.length, 0)
+        expand = SpannableString(context.getString(R.string.expand))
+        expand.setSpan(span, 0, expand.length, 0)
+        setMovementMethod(LinkMovementMethod.getInstance())
     }
 
-    @Override
-    public void setText(CharSequence text, BufferType type) {
-        this.text = text;
-        super.setText(text, type);
+    override fun setText(text: CharSequence?, type: BufferType?) {
+        this.text = text
+        super.setText(text, type)
     }
 
-    @Override
-    public boolean onPreDraw() {
-        this.getViewTreeObserver().removeOnPreDrawListener(this);
+    override fun onPreDraw(): Boolean {
+        this.getViewTreeObserver().removeOnPreDrawListener(this)
         if (lineCount == 0) {
-            lineCount = getLayout().getLineCount();
+            lineCount = getLayout().getLineCount()
         }
         if (lineCount > maxLines) {
-            int hintTextOffsetEnd;
+            val hintTextOffsetEnd: Int
             if (maxLines == getMaxLines()) {
-                nextLines = lineCount + 1;
-                hintTextOffsetEnd = getLayout().getLineStart(getMaxLines() - 1);
-                setTextWithSpan(text, hintTextOffsetEnd - 1, expand);
+                nextLines = lineCount + 1
+                hintTextOffsetEnd = getLayout().getLineStart(getMaxLines() - 1)
+                setTextWithSpan(text, hintTextOffsetEnd - 1, expand)
             } else if (nextLines == getMaxLines()) {
-                nextLines = maxLines;
-                hintTextOffsetEnd = getLayout().getLineStart(getMaxLines() - 1);
-                setTextWithSpan(text, hintTextOffsetEnd, collapse);
+                nextLines = maxLines
+                hintTextOffsetEnd = getLayout().getLineStart(getMaxLines() - 1)
+                setTextWithSpan(text, hintTextOffsetEnd, collapse)
             }
         }
-        return super.onPreDraw();
+        return super.onPreDraw()
     }
 
-    private void setTextWithSpan(CharSequence text, int textOffsetEnd,
-                                 SpannableString sbStr) {
-        sb.clearSpans();
-        sb.clear();
-        sb.append(text, 0, textOffsetEnd);
-        sb.append("\n");
-        sb.append(sbStr);
-        super.setText(sb, BufferType.NORMAL);
+    private fun setTextWithSpan(
+        text: CharSequence?, textOffsetEnd: Int,
+        sbStr: SpannableString?
+    ) {
+        sb.clearSpans()
+        sb.clear()
+        sb.append(text, 0, textOffsetEnd)
+        sb.append("\n")
+        sb.append(sbStr)
+        super.setText(sb, BufferType.NORMAL)
     }
 
-    @Override
-    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
-        super.onLayout(changed, left, top, right, bottom);
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
         if (getLayout() != null) {
-            lineCount = getLayout().getLineCount();
+            lineCount = getLayout().getLineCount()
         }
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    @Override
-    public boolean onTouchEvent(@NonNull MotionEvent event) {
-        Layout layout = this.getLayout();
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        val layout = this.getLayout()
         if (layout != null) {
-            int line = layout.getLineForVertical((int) event.getY());
-            int offset = layout.getOffsetForHorizontal(line, event.getX());
+            val line = layout.getLineForVertical(event.getY().toInt())
+            val offset = layout.getOffsetForHorizontal(line, event.getX())
 
-            if (getText() instanceof Spanned) {
-                Spanned spanned = (Spanned) getText();
+            if (getText() is Spanned) {
+                val spanned = getText() as Spanned
 
-                ClickableSpan[] links = spanned.getSpans(offset, offset, ClickableSpan.class);
+                val links =
+                    spanned.getSpans<ClickableSpan?>(offset, offset, ClickableSpan::class.java)
 
-                if (links.length == 0) {
-                    return false;
+                if (links.size == 0) {
+                    return false
                 } else {
-                    return super.onTouchEvent(event);
+                    return super.onTouchEvent(event)
                 }
             }
         }
 
-        return false;
+        return false
     }
 
-    @Override
-    public Parcelable onSaveInstanceState() {
-        Bundle bundle = new Bundle();
-        bundle.putParcelable("superState", super.onSaveInstanceState());
-        bundle.putInt("maxLines", getMaxLines());
-        return bundle;
+    override fun onSaveInstanceState(): Parcelable {
+        val bundle = Bundle()
+        bundle.putParcelable("superState", super.onSaveInstanceState())
+        bundle.putInt("maxLines", getMaxLines())
+        return bundle
     }
 
-    @Override
-    public void onRestoreInstanceState(Parcelable state) {
-        if (state instanceof Bundle) {
-            Bundle bundle = (Bundle) state;
-            setMaxLines(bundle.getInt("maxLines"));
-            state = bundle.getParcelable("superState");
+    override fun onRestoreInstanceState(state: Parcelable?) {
+        var state = state
+        if (state is Bundle) {
+            val bundle = state
+            setMaxLines(bundle.getInt("maxLines"))
+            state = bundle.getParcelable<Parcelable?>("superState")
         }
-        super.onRestoreInstanceState(state);
+        super.onRestoreInstanceState(state)
     }
-
 }
