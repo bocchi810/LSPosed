@@ -117,8 +117,8 @@ val generateWebRoot = tasks.register<Copy>("generateWebRoot") {
     val webroottmp = File("$projectDir/build/intermediates/generateWebRoot")
     val webrootsrc = File(webroottmp, "src")
     
-    val pnpmfileSrc = File(projectDir, ".pnpmfile.cjs")
-    val pnpmfileDst = File(webroottmp, ".pnpmfile.cjs")
+    val pnpmfileSrc = File(projectDir, "pnpm-workspace.yaml")
+    val pnpmfileDst = File(webroottmp, "pnpm-workspace.yaml")
 
     onlyIf {
         val os = org.gradle.internal.os.OperatingSystem.current()
