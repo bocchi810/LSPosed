@@ -116,6 +116,9 @@ val generateWebRoot = tasks.register<Copy>("generateWebRoot") {
     group = "LSPosed"
     val webroottmp = File("$projectDir/build/intermediates/generateWebRoot")
     val webrootsrc = File(webroottmp, "src")
+    
+    val pnpmfileSrc = File(projectDir, ".pnpmfile.cjs")
+    val pnpmfileDst = File(webroottmp, ".pnpmfile.cjs")
 
     onlyIf {
         val os = org.gradle.internal.os.OperatingSystem.current()
@@ -135,6 +138,7 @@ val generateWebRoot = tasks.register<Copy>("generateWebRoot") {
     doFirst {
         webroottmp.mkdirs()
         webrootsrc.mkdirs()
+        pnpmfileSrc.copyTo(pnpmfileDst, overwrite = true)
     }
 
     from("$projectDir/src/webroot")
